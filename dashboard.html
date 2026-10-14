@@ -132,8 +132,9 @@
   .badge.urgent { color:var(--danger); background:var(--danger-bg); border-color:var(--danger-line); }
 
   /* ---------- Lists ---------- */
-  .stack { display:grid; gap:12px; grid-template-columns:1fr; }
-  @media (min-width:900px) { .stack.two { grid-template-columns:1fr 1fr; } }
+  .stack { display:grid; gap:12px; grid-template-columns:minmax(0, 1fr); }
+  .stack > * { min-width:0; }
+  @media (min-width:900px) { .stack.two { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
   .reply { display:flex; flex-direction:column; gap:8px; padding-top:4px; }
   .reply[hidden] { display:none; }
   label { font-weight:600; font-size:14px; }
