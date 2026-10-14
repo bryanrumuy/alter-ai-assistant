@@ -116,7 +116,11 @@ function followUpRow(item) {
     note.textContent = " Mengirim...";
     try {
       await api("/api/followups/reply", { method: "POST", body: JSON.stringify({ id: item.id, text: input.value }) });
-      refresh();
+      // Clear the draft first: the timer refresh skips a view that still holds unsent text.
+      input.value = "";
+      input.blur();
+      form.hidden = true;
+      refresh(true);
     } catch (error) {
       send.disabled = false;
       note.textContent = " Gagal: " + error.message;
@@ -128,7 +132,7 @@ function followUpRow(item) {
   const doneButton = el("button", { class: "small" }, "Selesai");
   doneButton.addEventListener("click", async () => {
     await api("/api/followups/done", { method: "POST", body: JSON.stringify({ id: item.id }) });
-    refresh();
+    refresh(true);
   });
   return el("div", { class: "row" },
     el("div", { class: "grow" },
@@ -144,7 +148,7 @@ async function showChats(view) {
   if (state.chat) {
     const { messages } = await api(`/api/chat?channel=${encodeURIComponent(state.chat.channel)}&chatId=${encodeURIComponent(state.chat.chat_id)}`);
     return view.replaceChildren(
-      el("button", { class: "small", onclick: () => { state.chat = null; refresh(); } }, "Kembali"),
+      el("button", { class: "small", onclick: () => { state.chat = null; refresh(true); } }, "Kembali"),
       el("h3", {}, state.chat.name),
       ...messages.map((m) => el("div", { class: `msg ${m.direction}` }, m.text))
     );
@@ -156,7 +160,7 @@ async function showChats(view) {
       el("div", { class: "grow" },
         el("div", {}, el("strong", {}, chat.name), " ", el("span", { class: "tag" }, chat.channel), " ", el("span", { class: "muted" }, `${chat.messages} pesan, ${time(chat.ts)}`)),
         el("p", { class: "pre muted" }, chat.preview)),
-      el("button", { class: "small", onclick: () => { state.chat = chat; refresh(); } }, "Buka"))
+      el("button", { class: "small", onclick: () => { state.chat = chat; refresh(true); } }, "Buka"))
   ));
 }
 
@@ -172,16 +176,19 @@ async function showKnowledge(view) {
   );
 }
 
-async function refresh() {
+// `force` is set by something the user just did (a click); the timer never forces,
+// so it cannot wipe a reply the staff is still writing.
+async function refresh(force = false) {
   const view = document.getElementById("view");
   try {
     const overview = await api("/api/overview");
     renderStats(overview.stats);
     renderStatus(overview.active);
-    if (document.activeElement && document.activeElement.tagName === "TEXTAREA") return;
-    // Do not wipe a reply the staff is still writing.
-    const draft = view.querySelector(".reply:not([hidden]) textarea");
-    if (draft && draft.value) return;
+    if (!force) {
+      if (document.activeElement && document.activeElement.tagName === "TEXTAREA") return;
+      const draft = view.querySelector(".reply:not([hidden]) textarea");
+      if (draft && draft.value) return;
+    }
     await ({ followups: showFollowUps, chats: showChats, knowledge: showKnowledge })[state.tab](view);
   } catch (error) {
     view.replaceChildren(el("div", { class: "empty" }, "Gagal memuat: " + error.message));
@@ -193,16 +200,16 @@ document.querySelectorAll("nav button").forEach((button) =>
     state.tab = button.dataset.tab;
     state.chat = null;
     document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b === button));
-    refresh();
+    refresh(true);
   })
 );
 document.getElementById("toggle").addEventListener("click", async () => {
   await api("/api/active", { method: "POST", body: JSON.stringify({ active: !state.active }) });
-  refresh();
+  refresh(true);
 });
 
 refresh();
-setInterval(refresh, 10000);
+setInterval(() => refresh(), 10000);
 </script>
 </body>
 </html>
