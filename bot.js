@@ -10,6 +10,15 @@ const config = require("./config");
 const askAI = require("./ai-online");
 const { isPausedByManual, createRateLimiter } = require("./lib");
 const { recordFollowUp, recentFollowUps } = require("./followups");
+const { getStore } = require("./db");
+
+function logMessage(chatId, name, direction, text) {
+  try {
+    getStore().logMessage({ channel: "whatsapp", chatId, name, direction, text });
+  } catch (error) {
+    console.log("Could not log the message:", error.message);
+  }
+}
 
 const STATE_FILE = path.join(config.dataDir, "state.json");
 const QR_FILE = path.join(config.dataDir, "qr.png");
@@ -109,6 +118,7 @@ async function handleIncomingMessage(message) {
   const contact = await message.getContact();
   const senderName = contact.pushname || "Teman";
 
+  logMessage(message.from, senderName, "in", message.body);
   await chat.sendStateTyping();
   const result = await askAI(message.body, message.from);
 
@@ -133,6 +143,7 @@ async function handleIncomingMessage(message) {
   await new Promise((resolve) => setTimeout(resolve, typingMs));
 
   await sendBotMessage(message.from, result.text);
+  logMessage(message.from, senderName, "out", result.text);
   await chat.clearState();
 
   if (!result.failed) {

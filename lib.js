@@ -11,22 +11,16 @@ const NOTE_TAG = "[CATAT]";
  * such as "Bryan:" or "Asisten:" is stripped as well.
  */
 function parseReply(raw) {
-  let text = String(raw ?? "").trim();
-  let isUrgent = false;
-  let needsFollowUp = false;
-  for (;;) {
-    const upper = text.toUpperCase();
-    if (upper.startsWith(URGENT_TAG)) {
-      isUrgent = true;
-      text = text.slice(URGENT_TAG.length).trim();
-    } else if (upper.startsWith(NOTE_TAG)) {
-      needsFollowUp = true;
-      text = text.slice(NOTE_TAG.length).trim();
-    } else {
-      break;
-    }
-  }
-  text = text.replace(/^(bryan|asisten|assistant|ai)\s*:\s*/i, "");
+  const original = String(raw ?? "");
+  // Models sometimes put a tag mid-sentence or at the end, so look for it anywhere.
+  const isUrgent = original.toUpperCase().includes(URGENT_TAG);
+  const needsFollowUp = original.toUpperCase().includes(NOTE_TAG);
+  const text = original
+    .replace(/\[(URGENT|CATAT)\]/gi, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([.,!?])/g, "$1")
+    .trim()
+    .replace(/^(bryan|asisten|assistant|ai)\s*:\s*/i, "");
   return { text, isUrgent, needsFollowUp: needsFollowUp || isUrgent };
 }
 

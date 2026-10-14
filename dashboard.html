@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alter Dashboard</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f6f7fb; --card:#fff; --text:#16181d; --muted:#667085; --line:#e4e7ee; --accent:#5b3df5; --danger:#d92d20; --ok:#12805c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#181b22; --text:#eceef3; --muted:#9aa3b2; --line:#2a2f3a; --accent:#8b7bff; --danger:#ff6b60; --ok:#4cc38a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); background:var(--card); }
+  h1 { font-size:18px; margin:0; }
+  main { max-width:960px; margin:0 auto; padding:20px 16px 48px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .stat b { display:block; font-size:26px; }
+  .stat span { color:var(--muted); font-size:13px; }
+  nav { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:8px; padding:8px 14px; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.small { padding:4px 10px; font-size:13px; }
+  .row { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px; }
+  .row .grow { flex:1; min-width:0; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--muted); }
+  .tag.urgent { color:var(--danger); border-color:var(--danger); }
+  .muted { color:var(--muted); font-size:13px; }
+  .msg { padding:8px 12px; border-radius:12px; margin:6px 0; max-width:85%; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .msg.in { background:var(--bg); border:1px solid var(--line); }
+  .msg.out { background:var(--accent); color:#fff; margin-left:auto; }
+  textarea { width:100%; min-height:260px; font:14px/1.5 ui-monospace, monospace; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .status { font-size:14px; }
+  .status.active { color:var(--ok); } .status.off { color:var(--danger); }
+  .empty { color:var(--muted); padding:24px; text-align:center; }
+  .pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Alter Dashboard</h1>
+  <div><span id="status" class="status"></span> <button id="toggle" class="small"></button></div>
+</header>
+<main>
+  <section class="stats" id="stats" aria-label="Ringkasan"></section>
+  <nav aria-label="Bagian">
+    <button data-tab="followups" class="on">Tindak lanjut</button>
+    <button data-tab="chats">Percakapan</button>
+    <button data-tab="knowledge">Pengetahuan</button>
+  </nav>
+  <div id="view" class="card" aria-live="polite"></div>
+</main>
+<script>
+"use strict";
+const HEADERS = { "Content-Type": "application/json", "X-Requested-With": "alter-dashboard" };
+const state = { tab: "followups", chat: null, active: false };
+
+async function api(path, options) {
+  const response = await fetch(path, { ...options, headers: HEADERS });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || response.statusText);
+  return response.json();
+}
+
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key === "class") node.className = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value);
+  }
+  for (const child of children.flat()) node.append(child);
+  return node;
+}
+
+const time = (iso) => new Date(iso).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+
+function renderStats(stats) {
+  const items = [
+    ["Pesan masuk 24 jam", stats.messagesToday],
+    ["Total percakapan", stats.chatsTotal],
+    ["Perlu ditindaklanjuti", stats.openFollowUps],
+    ["Urgent", stats.openUrgent],
+    ["Sudah selesai", stats.resolvedFollowUps],
+  ];
+  document.getElementById("stats").replaceChildren(
+    ...items.map(([label, value]) => el("div", { class: "card stat" }, el("b", {}, String(value)), el("span", {}, label)))
+  );
+}
+
+function renderStatus(active) {
+  state.active = active;
+  const status = document.getElementById("status");
+  status.textContent = active ? "Bot aktif" : "Bot mati";
+  status.className = `status ${active ? "active" : "off"}`;
+  document.getElementById("toggle").textContent = active ? "Matikan" : "Aktifkan";
+}
+
+async function showFollowUps(view) {
+  const { items } = await api("/api/followups");
+  if (!items.length) return view.replaceChildren(el("div", { class: "empty" }, "Tidak ada yang menunggu."));
+  view.replaceChildren(...items.map((item) =>
+    el("div", { class: "row" },
+      el("div", { class: "grow" },
+        el("div", {}, el("strong", {}, item.name), " ", el("span", { class: "tag" }, item.channel), " ",
+          item.urgent ? el("span", { class: "tag urgent" }, "urgent") : "", " ", el("span", { class: "muted" }, time(item.ts))),
+        el("p", { class: "pre" }, item.message),
+        el("p", { class: "pre muted" }, "Balasan bot: " + item.reply)),
+      el("button", { class: "small", onclick: async () => { await api("/api/followups/done", { method: "POST", body: JSON.stringify({ id: item.id }) }); refresh(); } }, "Selesai"))
+  ));
+}
+
+async function showChats(view) {
+  if (state.chat) {
+    const { messages } = await api(`/api/chat?channel=${encodeURIComponent(state.chat.channel)}&chatId=${encodeURIComponent(state.chat.chat_id)}`);
+    return view.replaceChildren(
+      el("button", { class: "small", onclick: () => { state.chat = null; refresh(); } }, "Kembali"),
+      el("h3", {}, state.chat.name),
+      ...messages.map((m) => el("div", { class: `msg ${m.direction}` }, m.text))
+    );
+  }
+  const { chats } = await api("/api/chats");
+  if (!chats.length) return view.replaceChildren(el("div", { class: "empty" }, "Belum ada percakapan."));
+  view.replaceChildren(...chats.map((chat) =>
+    el("div", { class: "row" },
+      el("div", { class: "grow" },
+        el("div", {}, el("strong", {}, chat.name), " ", el("span", { class: "tag" }, chat.channel), " ", el("span", { class: "muted" }, `${chat.messages} pesan, ${time(chat.ts)}`)),
+        el("p", { class: "pre muted" }, chat.preview)),
+      el("button", { class: "small", onclick: () => { state.chat = chat; refresh(); } }, "Buka"))
+  ));
+}
+
+async function showKnowledge(view) {
+  const { text } = await api("/api/knowledge");
+  const area = el("textarea", { "aria-label": "Basis pengetahuan", maxlength: "8000" });
+  area.value = text;
+  const note = el("span", { class: "muted" });
+  view.replaceChildren(
+    el("p", { class: "muted" }, "Fakta yang boleh dipakai bot untuk menjawab (FAQ, jam buka, harga, kebijakan). Maksimal 8000 karakter."),
+    area,
+    el("p", {}, el("button", { class: "on", onclick: async () => { await api("/api/knowledge", { method: "PUT", body: JSON.stringify({ text: area.value }) }); note.textContent = " Tersimpan."; } }, "Simpan"), note)
+  );
+}
+
+async function refresh() {
+  const view = document.getElementById("view");
+  try {
+    const overview = await api("/api/overview");
+    renderStats(overview.stats);
+    renderStatus(overview.active);
+    if (document.activeElement && document.activeElement.tagName === "TEXTAREA") return;
+    await ({ followups: showFollowUps, chats: showChats, knowledge: showKnowledge })[state.tab](view);
+  } catch (error) {
+    view.replaceChildren(el("div", { class: "empty" }, "Gagal memuat: " + error.message));
+  }
+}
+
+document.querySelectorAll("nav button").forEach((button) =>
+  button.addEventListener("click", () => {
+    state.tab = button.dataset.tab;
+    state.chat = null;
+    document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b === button));
+    refresh();
+  })
+);
+document.getElementById("toggle").addEventListener("click", async () => {
+  await api("/api/active", { method: "POST", body: JSON.stringify({ active: !state.active }) });
+  refresh();
+});
+
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

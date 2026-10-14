@@ -23,6 +23,13 @@ An assistant that answers WhatsApp chats on your behalf while you are busy. It i
 2. Run `npm run telegram`, send `/myid` to your bot, and put that number in `TELEGRAM_OWNER_ID`. Restart.
 3. As the owner send `/on`. People who message the bot get answers; messages that need you are logged and sent to you at once. `/off`, `/status` and `/pending` work as well.
 
+## Dashboard and business mode
+
+- `npm run dashboard` opens an admin page (default `http://127.0.0.1:3100`, password from `DASHBOARD_PASSWORD`). It shows the follow-up queue (mark items done), every conversation, daily stats, the on/off switch for the Telegram bot, and an editor for the knowledge file.
+- Conversations and follow-ups are stored in a SQLite file (`alter.db`, built-in `node:sqlite`, no extra dependency).
+- Set `BOT_MODE=business` and `BUSINESS_NAME` to turn the assistant into a customer-service bot: it answers only from `knowledge.md` (see `knowledge.business-example.md`), never invents prices or promises, escalates complaints, refunds and discounts to the team, and flags urgent safety issues. `npm run eval:business` checks that behaviour with 10 scenarios.
+- The dashboard has no user accounts, only one shared password. It is meant for localhost or a private network; put it behind HTTPS and a reverse proxy before exposing it.
+
 ## Setup
 
 1. Install Node.js 18 or newer, then run `npm install`.

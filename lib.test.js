@@ -61,3 +61,10 @@ test("parseReply reads several tags in a row", () => {
   const result = parseReply("[CATAT] [URGENT] tenang ya");
   assert.deepEqual(result, { text: "tenang ya", isUrgent: true, needsFollowUp: true });
 });
+
+test("parseReply finds and removes a tag in the middle or at the end", () => {
+  const middle = parseReply("Belum ada infonya. [CATAT] Saya teruskan ke tim.");
+  assert.deepEqual(middle, { text: "Belum ada infonya. Saya teruskan ke tim.", isUrgent: false, needsFollowUp: true });
+  const end = parseReply("Saya teruskan ya. [CATAT]");
+  assert.deepEqual(end, { text: "Saya teruskan ya.", isUrgent: false, needsFollowUp: true });
+});

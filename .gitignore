@@ -13,3 +13,6 @@ qr.png
 followups.jsonl
 knowledge.md
 telegram-state.json
+alter.db
+alter.db-wal
+alter.db-shm

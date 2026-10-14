@@ -11,3 +11,6 @@ followups.jsonl
 qr.png
 .git
 telegram-state.json
+alter.db
+alter.db-wal
+alter.db-shm

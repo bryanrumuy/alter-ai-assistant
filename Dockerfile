@@ -1,4 +1,4 @@
-FROM node:22-slim
+FROM node:24-slim
 
 # Chromium for whatsapp-web.js (puppeteer's own download is skipped).
 RUN apt-get update \

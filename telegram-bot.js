@@ -6,6 +6,7 @@ const askAI = require("./ai-online");
 const { createRateLimiter } = require("./lib");
 const { recordFollowUp, recentFollowUps } = require("./followups");
 const { createAssistant } = require("./telegram-core");
+const { getStore } = require("./db");
 
 if (!config.apiKey) {
   console.error("OPENAI_API_KEY is missing. Copy .env.example to .env and fill it in.");
@@ -24,6 +25,7 @@ const assistant = createAssistant({
   allowReply: createRateLimiter(config.maxRepliesPerMinute, 60 * 1000),
   ownerId: config.telegramOwnerId,
   ownerName: config.ownerName,
+  store: getStore(),
 });
 
 function ioFor(ctx) {

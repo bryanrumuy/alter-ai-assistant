@@ -2,9 +2,15 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const { createAssistant, INACTIVE_TEXT } = require("./telegram-core");
+const { createStore } = require("./db");
 
 function setup(overrides = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alter-tg-"));
+  const store = createStore(path.join(dir, "test.db"));
   const sent = { replies: [], owner: [], followUps: [] };
   const io = {
     reply: async (text) => sent.replies.push(text),
@@ -23,9 +29,11 @@ function setup(overrides = {}) {
     allowReply: () => true,
     ownerId: "42",
     ownerName: "Bryan",
+    store,
+    stateFile: path.join(dir, "state.json"),
     ...overrides,
   });
-  return { assistant, io, sent };
+  return { assistant, io, sent, store };
 }
 
 test("only the owner can switch the bot on", async () => {
@@ -35,7 +43,6 @@ test("only the owner can switch the bot on", async () => {
   assert.match(sent.replies[0], /pemilik/);
   await assistant.handleCommand("on", { id: 42 }, io);
   assert.equal(assistant.isActive(), true);
-  await assistant.handleCommand("off", { id: 42 }, io);
 });
 
 test("a switched-off bot answers with the rest message and does not call the model", async () => {
@@ -58,9 +65,18 @@ test("a follow-up is logged, the owner is told, and the visitor gets the reply",
   await assistant.handleText({ chatId: 1, name: "Rina", text: "titip pesan ya" }, io);
   assert.equal(sent.followUps.length, 1);
   assert.equal(sent.followUps[0].name, "Rina");
+  assert.equal(sent.followUps[0].channel, "telegram");
   assert.match(sent.owner[0], /Rina/);
   assert.deepEqual(sent.replies, ["siap, nanti aku sampaikan"]);
-  await assistant.handleCommand("off", { id: 42 }, io);
+});
+
+test("both sides of the conversation are stored for the dashboard", async () => {
+  const { assistant, io, store } = setup();
+  await assistant.handleCommand("on", { id: 42 }, io);
+  await assistant.handleText({ chatId: 5, name: "Rina", text: "halo" }, io);
+  const messages = store.getChat("telegram", 5);
+  assert.deepEqual(messages.map((m) => m.direction), ["in", "out"]);
+  assert.equal(messages[0].text, "halo");
 });
 
 test("a rate-limited chat gets no reply", async () => {
@@ -69,7 +85,6 @@ test("a rate-limited chat gets no reply", async () => {
   sent.replies.length = 0;
   await assistant.handleText({ chatId: 1, name: "Rina", text: "halo" }, io);
   assert.deepEqual(sent.replies, []);
-  await assistant.handleCommand("off", { id: 42 }, io);
 });
 
 test("with no owner id configured nobody gets owner commands", async () => {
