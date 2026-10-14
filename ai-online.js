@@ -216,6 +216,10 @@ function runCreateOrder(rawArguments, context, orders, menu, lastAssistantText) 
   if (priced.error) return { error: priced.error };
   const pickupTime = String(args.pickup_time ?? "").trim().slice(0, MAX_PICKUP_CHARS);
   if (!pickupTime) return { error: "Jam ambil belum diisi." };
+  // Staff schedule by the clock, so "after lunch" is not enough: ask the customer for an actual time.
+  if (!/\d/.test(pickupTime)) {
+    return { error: "Jam ambil harus berupa jam yang jelas (misalnya 12.30). Tanyakan jam pastinya kepada pelanggan." };
+  }
 
   // Confirmation is enforced here, not left to the model: the order is only stored when the customer
   // has already been shown this exact total. Otherwise the model must first show the summary.

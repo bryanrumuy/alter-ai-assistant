@@ -117,3 +117,15 @@ test("a model that keeps calling the tool creates one order and the customer sti
   assert.equal(result.failed, false);
   assert.match(result.text, new RegExp(`Pesanan #${result.orders[0].id} tercatat`));
 });
+
+test("a vague pickup time such as 'after lunch' is refused until the customer gives a clock time", async () => {
+  const before = getStore().listOrders("active").length;
+  const requests = modelSays(
+    toolCall({ items: [{ name: "Americano", quantity: 1 }], pickup_time: "habis jam makan siang" }),
+    text("Jam berapa tepatnya mau diambil?")
+  );
+  const result = await askAI("americano 1, ambil habis makan siang", "tg:15", context(15));
+  assert.equal(result.orders.length, 0);
+  assert.equal(getStore().listOrders("active").length, before);
+  assert.match(JSON.parse(requests[1].messages.at(-1).content).error, /jam yang jelas/);
+});
