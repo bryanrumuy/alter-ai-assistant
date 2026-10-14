@@ -27,8 +27,8 @@ An assistant that answers WhatsApp chats on your behalf while you are busy. It i
 
 - `npm run dashboard` opens an admin page (default `http://127.0.0.1:3100`, password from `DASHBOARD_PASSWORD`). It shows the follow-up queue (mark items done), every conversation, daily stats, the on/off switch for the Telegram bot, and an editor for the knowledge file.
 - Conversations and follow-ups are stored in a SQLite file (`alter.db`, built-in `node:sqlite`, no extra dependency).
-- Edit `menu.json` to change the items and prices. Set `BOT_MODE=business` and `BUSINESS_NAME` to turn the assistant into a customer-service bot: it answers only from `knowledge.md` (see `knowledge.business-example.md`), never invents prices or promises, escalates complaints, refunds and discounts to the team, and flags urgent safety issues. `npm run eval:business` checks that behaviour with 10 scenarios.
-- **Order taking (business mode):** the assistant can take a pickup order from a chat. It collects items and pickup time, summarises the order with the total, and only after the customer confirms it calls a `create_order` function (OpenAI function calling). Item names are restricted to `menu.json`, and the total is computed by the code, never by the model. Orders appear in the dashboard's **Pesanan** tab; moving one to "Proses", "Siap diambil" or "Batalkan" messages the customer automatically. `npm run eval:orders` checks four ordering scenarios (a confirmed order, an item not on the menu, no order before confirmation, a changed quantity) in a throwaway database.
+- Edit `menu.json` to change the items and prices (the shipped menu is an English demo cafe; `MENU_FILE` points to another file). Set `BOT_MODE=business` and `BUSINESS_NAME` to turn the assistant into a customer-service bot: it answers only from `knowledge.md` (see `knowledge.business-example.md`), never invents prices or promises, escalates complaints, refunds and discounts to the team, and flags urgent safety issues. `npm run eval:business` checks that behaviour with 10 scenarios.
+- **Order taking (business mode):** the assistant can take a pickup order from a chat. It collects items and pickup time, summarises the order with the total, and only after the customer confirms it calls a `create_order` function (OpenAI function calling). Item names are restricted to `menu.json`, and the total is computed by the code, never by the model. Orders appear in the dashboard's **Pesanan** tab; moving one to "Proses", "Siap diambil" or "Batalkan" messages the customer automatically. `npm run eval:orders` checks seven English ordering scenarios (a confirmed order, an item not on the menu, a complete order that is only summarised, no order before confirmation, a vague pickup time, a repeated "yes", a changed quantity) in a throwaway database.
 - Staff can reply to a customer from the dashboard's follow-up queue (Telegram only).
 - The dashboard has no user accounts, only one shared password. It is meant for localhost or a private network; put it behind HTTPS and a reverse proxy before exposing it.
 
@@ -51,6 +51,10 @@ Send these to your own chat ("Message yourself"):
 | `/help`   | List the commands                        |
 
 The bot starts switched off. Send `/on` when you want it to answer.
+
+## Demo data
+
+`node seed-demo.js` fills an **empty** database with nine fictional customers (English chats: opening hours, oat milk, delivery, a cold-drink refund, an allergy emergency, a catering enquiry, four orders in different states). The replies are written by the real assistant, so it makes about 25 model calls, and the timestamps are spread over the last hours. Copy `knowledge.business-example.en.md` to `knowledge.md` first. Treat the result as a labelled demo, not as real customer data.
 
 ## Tests and evaluation
 

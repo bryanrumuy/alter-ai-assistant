@@ -93,3 +93,11 @@ test("a reworded second paragraph is dropped, a genuinely different one is kept"
   const different = "Pesanan kamu sudah tercatat.\nSilakan ambil di kasir sebelum pukul 17.00 ya.";
   assert.equal(parseReply(different).text, different);
 });
+
+test("the language detector tells English from Indonesian and stays quiet when unsure", () => {
+  const { detectLanguage } = require("./lib");
+  assert.equal(detectLanguage("I would like 2 iced lattes for pickup tomorrow, please"), "en");
+  assert.equal(detectLanguage("saya mau pesan kopi susu besok ya, ambil jam 5"), "id");
+  assert.equal(detectLanguage("Americano"), null);
+  assert.equal(detectLanguage(""), null);
+});

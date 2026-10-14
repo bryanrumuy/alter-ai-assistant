@@ -1,6 +1,7 @@
 [
-  { "name": "Kopi susu", "price": 22000 },
-  { "name": "Americano", "price": 18000 },
-  { "name": "Matcha latte", "price": 26000 },
-  { "name": "Croissant", "price": 20000 }
+  { "name": "Iced latte", "price": 28000 },
+  { "name": "Americano", "price": 22000 },
+  { "name": "Matcha latte", "price": 30000 },
+  { "name": "Butter croissant", "price": 24000 },
+  { "name": "Cheesecake slice", "price": 32000 }
 ]

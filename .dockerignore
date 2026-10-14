@@ -16,3 +16,4 @@ alter.db-wal
 alter.db-shm
 whatsapp-state.json
 brain.telegram.json
+backups

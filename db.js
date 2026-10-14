@@ -64,6 +64,9 @@ function createStore(file) {
   );
 
   return {
+    // The open handle, for maintenance scripts such as seed-demo.js. Application code uses the methods below.
+    raw: db,
+
     logMessage({ channel, chatId, name, direction, text }) {
       insertMessage.run(new Date().toISOString(), channel, String(chatId), name, direction, String(text));
     },
@@ -102,6 +105,16 @@ function createStore(file) {
         db
           .prepare("SELECT COUNT(*) c FROM orders WHERE channel = ? AND chat_id = ? AND status IN ('baru', 'diproses', 'siap')")
           .get(channel, String(chatId)).c
+      );
+    },
+
+    /** True when this chat placed the very same items a moment ago and did not cancel them (a repeated "yes"). */
+    hasRecentIdenticalOrder(channel, chatId, items, withinMs) {
+      const since = new Date(Date.now() - withinMs).toISOString();
+      return Boolean(
+        db
+          .prepare("SELECT 1 FROM orders WHERE channel = ? AND chat_id = ? AND items = ? AND ts >= ? AND status != 'batal' LIMIT 1")
+          .get(channel, String(chatId), JSON.stringify(items), since)
       );
     },
 

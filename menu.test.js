@@ -33,7 +33,7 @@ test("names are matched ignoring case and the same item is merged", () => {
 });
 
 test("an item that is not on the menu is rejected", () => {
-  assert.match(priceOrder([{ name: "Es krim", quantity: 1 }], menu).error, /tidak ada di menu/);
+  assert.match(priceOrder([{ name: "Es krim", quantity: 1 }], menu).error, /not on the menu/);
 });
 
 test("bad quantities and empty orders are rejected", () => {

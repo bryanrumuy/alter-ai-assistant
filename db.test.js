@@ -80,3 +80,14 @@ test("orders move through their statuses and feed the stats", () => {
   store.setOrderStatus(id, "batal");
   assert.equal(store.stats().revenueToday, 0, "a cancelled order is not revenue");
 });
+
+test("an identical order from the same chat a moment ago is recognised, a cancelled or different one is not", () => {
+  const store = createStore(":memory:");
+  const items = [{ name: "Americano", quantity: 1, price: 22000, subtotal: 22000 }];
+  const id = store.addOrder({ ...base, items, total: 22000, pickupTime: "9 am" });
+  assert.equal(store.hasRecentIdenticalOrder("telegram", 1, items, 60000), true, "the pickup wording may differ between the calls");
+  assert.equal(store.hasRecentIdenticalOrder("telegram", 1, [{ ...items[0], quantity: 2 }], 60000), false);
+  assert.equal(store.hasRecentIdenticalOrder("telegram", 2, items, 60000), false);
+  store.setOrderStatus(id, "batal");
+  assert.equal(store.hasRecentIdenticalOrder("telegram", 1, items, 60000), false);
+});

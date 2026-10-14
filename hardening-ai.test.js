@@ -10,6 +10,7 @@ process.env.DATA_DIR = dir;
 process.env.DB_FILE = path.join(dir, "test.db");
 process.env.BOT_MODE = "business";
 process.env.OPENAI_API_KEY = "test-key";
+process.env.MENU_FILE = path.join(__dirname, "menu.indonesian-fixture.json");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");

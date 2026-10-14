@@ -3,12 +3,13 @@
 // Business-mode check: runs customer questions against the demo knowledge file.
 // Usage: npm run eval:business   (makes ~10 API calls)
 
+const path = require("path");
+process.env.MENU_FILE = path.join(__dirname, "menu.indonesian-fixture.json");
 process.env.BOT_MODE = "business";
 process.env.BUSINESS_NAME = "Kopi Senja";
 process.env.KNOWLEDGE_FILE = "knowledge.business-example.md";
 
 const fs = require("fs");
-const path = require("path");
 const config = require("./config");
 const askAI = require("./ai-online");
 

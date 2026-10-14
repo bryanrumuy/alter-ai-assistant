@@ -11,6 +11,7 @@ process.env.DB_FILE = path.join(dir, "test.db");
 process.env.BOT_MODE = "business";
 process.env.BUSINESS_NAME = "Kopi Senja";
 process.env.OPENAI_API_KEY = "test-key";
+process.env.MENU_FILE = path.join(__dirname, "menu.indonesian-fixture.json");
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -127,5 +128,5 @@ test("a vague pickup time such as 'after lunch' is refused until the customer gi
   const result = await askAI("americano 1, ambil habis makan siang", "tg:15", context(15));
   assert.equal(result.orders.length, 0);
   assert.equal(getStore().listOrders("active").length, before);
-  assert.match(JSON.parse(requests[1].messages.at(-1).content).error, /jam yang jelas/);
+  assert.match(JSON.parse(requests[1].messages.at(-1).content).error, /clear clock time/);
 });

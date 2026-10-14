@@ -75,6 +75,23 @@ function parseReply(raw, ownerName = "bryan") {
   return { text, isUrgent, needsFollowUp: needsFollowUp || isUrgent };
 }
 
+const ENGLISH_WORDS = new Set("the a an i you we is are was were it this that and or but not no yes please would like want can could do does did have has my your our for with from at on in to of tomorrow today thanks thank hi hello hey order pickup how what when where which who why much many any some there here about".split(" "));
+const INDONESIAN_WORDS = new Set("yang dan di ke dari ini itu saya aku kamu anda kami kita mau ingin bisa tidak nggak gak ga ya dong deh nih sih dengan untuk pada adalah akan sudah belum juga atau karena besok hari ini tolong terima kasih makasih halo hai pesan pesanan ambil jam pukul berapa apa ada bagaimana kapan dimana mana siapa kenapa boleh".split(" "));
+
+/** "en", "id", or null when the text does not clearly lean one way (kept deliberately simple). */
+function detectLanguage(text) {
+  const words = String(text ?? "").toLowerCase().match(/[a-z']+/g) ?? [];
+  let english = 0;
+  let indonesian = 0;
+  for (const word of words) {
+    if (ENGLISH_WORDS.has(word)) english += 1;
+    if (INDONESIAN_WORDS.has(word)) indonesian += 1;
+  }
+  if (english >= 2 && english >= indonesian * 2) return "en";
+  if (indonesian >= 2 && indonesian >= english * 2) return "id";
+  return null;
+}
+
 /** True while a manual reply from the owner should keep the bot quiet. */
 function isPausedByManual(lastManualAt, now, pauseMinutes) {
   if (!lastManualAt) return false;
@@ -107,6 +124,7 @@ function trimHistory(history, max) {
 }
 
 module.exports = {
+  detectLanguage,
   collapseRepeats,
   collapseRewordings,
   URGENT_TAG,

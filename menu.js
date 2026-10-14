@@ -5,7 +5,8 @@ const path = require("path");
 
 const MAX_QTY_PER_ITEM = 20;
 const MAX_LINES = 10;
-const DEFAULT_FILE = path.join(__dirname, "menu.json");
+// MENU_FILE lets tests and other businesses use their own menu without touching menu.json.
+const DEFAULT_FILE = process.env.MENU_FILE ? path.resolve(process.env.MENU_FILE) : path.join(__dirname, "menu.json");
 
 /** The sellable items: [{ name, price }]. An empty list means ordering is switched off. */
 function loadMenu(file = DEFAULT_FILE) {
@@ -27,17 +28,17 @@ function formatRupiah(amount) {
  * Returns { lines, total } or { error }.
  */
 function priceOrder(rawItems, menu) {
-  if (!Array.isArray(rawItems) || rawItems.length === 0) return { error: "Pesanan kosong." };
-  if (rawItems.length > MAX_LINES) return { error: `Maksimal ${MAX_LINES} jenis item per pesanan.` };
+  if (!Array.isArray(rawItems) || rawItems.length === 0) return { error: "The order is empty." };
+  if (rawItems.length > MAX_LINES) return { error: `At most ${MAX_LINES} different items per order.` };
 
   const byName = new Map(menu.map((item) => [item.name.toLowerCase(), item]));
   const merged = new Map();
   for (const raw of rawItems) {
     const menuItem = byName.get(String(raw?.name ?? "").trim().toLowerCase());
-    if (!menuItem) return { error: `Item "${raw?.name}" tidak ada di menu.` };
+    if (!menuItem) return { error: `"${raw?.name}" is not on the menu.` };
     const qty = raw.quantity;
     if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY_PER_ITEM) {
-      return { error: `Jumlah ${menuItem.name} harus 1 sampai ${MAX_QTY_PER_ITEM}.` };
+      return { error: `The quantity of ${menuItem.name} must be 1 to ${MAX_QTY_PER_ITEM}.` };
     }
     merged.set(menuItem.name, (merged.get(menuItem.name) ?? 0) + qty);
   }
