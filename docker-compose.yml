@@ -1,14 +1,37 @@
+# Not tested on this machine (Docker is not installed here): treat as a starting point.
+x-common: &common
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  volumes:
+    # WhatsApp session, chat memory, database and on/off switches survive restarts here.
+    - bot-data:/data
+    # Optional FAQ facts the assistant may use.
+    # - ./knowledge.md:/app/knowledge.md
+
 services:
-  wa-ai-bot:
-    build: .
-    restart: unless-stopped
-    env_file: .env
-    volumes:
-      # WhatsApp session, chat memory and follow-ups survive restarts here.
-      - bot-data:/data
-      # Optional FAQ facts the assistant may use.
-      # - ./knowledge.md:/app/knowledge.md:ro
-    # Run `docker compose logs -f` on the first start to see the QR code to scan.
+  # Unofficial WhatsApp bot. First start: `docker compose logs -f whatsapp`, scan the QR code.
+  whatsapp:
+    <<: *common
+    command: ["node", "bot.js"]
+
+  # Official Telegram bot (long polling, no public address needed).
+  telegram:
+    <<: *common
+    command: ["node", "telegram-bot.js"]
+
+  # Staff dashboard. Published on this machine only; put HTTPS in front of it before exposing it.
+  dashboard:
+    <<: *common
+    command: ["node", "dashboard-bot.js"]
+    environment:
+      DASHBOARD_HOST: "0.0.0.0"
+    ports:
+      - "127.0.0.1:3100:3100"
 
 volumes:
   bot-data:

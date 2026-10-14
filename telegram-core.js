@@ -4,6 +4,7 @@ const path = require("path");
 const config = require("./config");
 const { readActive, writeActive } = require("./state");
 const { describeLines, formatRupiah } = require("./menu");
+const { formatPending } = require("./followups");
 
 const DEFAULT_STATE_FILE = path.join(config.dataDir, "telegram-state.json");
 const INACTIVE_TEXT = "Asistennya lagi istirahat. Coba lagi nanti ya.";
@@ -55,11 +56,8 @@ function createAssistant({
       await io.reply(`Status bot: ${isActive() ? "aktif" : "mati"}`);
     } else if (command === "pending") {
       const items = recentFollowUps(10);
-      const lines = items.map(
-        (item) => `- ${item.name}${item.urgent ? " (PENTING)" : ""}: "${item.message}"`
-      );
       await io.reply(
-        items.length ? `Perlu ditindaklanjuti (10 terbaru)\n${lines.join("\n")}` : "Tidak ada yang menunggu."
+        items.length ? `Perlu ditindaklanjuti (10 terbaru)\n${formatPending(items)}` : "Tidak ada yang menunggu."
       );
     } else {
       await io.reply("Perintah: /on /off /status /pending /myid");
@@ -81,11 +79,11 @@ function createAssistant({
   }
 
   async function handleText(message, io) {
+    if (!allowReply(message.chatId)) return; // also guards the rest message against bot-to-bot loops
     if (!isActive()) {
       await io.reply(INACTIVE_TEXT);
       return;
     }
-    if (!allowReply(message.chatId)) return;
 
     log(message, "in", message.text);
     await io.typing();

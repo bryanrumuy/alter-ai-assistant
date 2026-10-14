@@ -6,8 +6,15 @@ const { getStore } = require("./db");
 const { readActive, writeActive } = require("./state");
 const { createDashboard } = require("./dashboard");
 
+const DEFAULT_ALLOWED_HOSTS = ["127.0.0.1", "localhost", "[::1]"];
+
 if (!config.dashboardPassword) {
   console.error("DASHBOARD_PASSWORD is missing. Set a strong password in .env to start the dashboard.");
+  process.exit(1);
+}
+
+if (config.dashboardPassword.length < 12) {
+  console.error("DASHBOARD_PASSWORD must be at least 12 characters long.");
   process.exit(1);
 }
 
@@ -29,10 +36,11 @@ async function sendReply(channel, chatId, text) {
 const server = createDashboard({
   store: getStore(),
   password: config.dashboardPassword,
-  knowledgeFile: path.join(__dirname, config.knowledgeFile),
+  knowledgeFile: path.resolve(__dirname, config.knowledgeFile),
   readActive: () => readActive(stateFile),
   writeActive: (active) => writeActive(stateFile, active),
   sendReply,
+  allowedHosts: [...DEFAULT_ALLOWED_HOSTS, ...config.dashboardAllowedHosts],
 });
 
 server.listen(config.dashboardPort, config.dashboardHost, () => {

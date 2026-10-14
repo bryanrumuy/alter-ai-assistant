@@ -10,7 +10,9 @@ const NOTE_TAG = "[CATAT]";
  * The tags are removed so the contact never sees them. A leading speaker label
  * such as "Bryan:" or "Asisten:" is stripped as well.
  */
-function parseReply(raw) {
+const escapeRegExp = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function parseReply(raw, ownerName = "bryan") {
   const original = String(raw ?? "");
   // Models sometimes put a tag mid-sentence or at the end, so look for it anywhere.
   const isUrgent = original.toUpperCase().includes(URGENT_TAG);
@@ -18,9 +20,9 @@ function parseReply(raw) {
   const text = original
     .replace(/\[(URGENT|CATAT)\]/gi, " ")
     .replace(/[ \t]{2,}/g, " ")
-    .replace(/\s+([.,!?])/g, "$1")
+    .replace(/[ \t]+([.,!?])/g, "$1")
     .trim()
-    .replace(/^(bryan|asisten|assistant|ai)\s*:\s*/i, "");
+    .replace(new RegExp(`^(${escapeRegExp(ownerName)}|asisten|assistant)\\s*:\\s*`, "i"), "");
   return { text, isUrgent, needsFollowUp: needsFollowUp || isUrgent };
 }
 
@@ -40,6 +42,10 @@ function createRateLimiter(limit, windowMs) {
       return false;
     }
     hits.set(key, [...recent, now]);
+    // Forget keys that went quiet so the map cannot grow forever.
+    for (const [other, times] of hits) {
+      if (times.every((t) => now - t >= windowMs)) hits.delete(other);
+    }
     return true;
   };
 }

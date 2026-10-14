@@ -9,8 +9,9 @@ const cron = require("node-cron");
 const config = require("./config");
 const askAI = require("./ai-online");
 const { isPausedByManual, createRateLimiter } = require("./lib");
-const { recordFollowUp, recentFollowUps } = require("./followups");
+const { recordFollowUp, recentFollowUps, formatPending } = require("./followups");
 const { getStore } = require("./db");
+const { readActive, writeActive } = require("./state");
 
 function logMessage(chatId, name, direction, text) {
   try {
@@ -20,7 +21,7 @@ function logMessage(chatId, name, direction, text) {
   }
 }
 
-const STATE_FILE = path.join(config.dataDir, "state.json");
+const STATE_FILE = path.join(config.dataDir, "whatsapp-state.json");
 const QR_FILE = path.join(config.dataDir, "qr.png");
 // Messages the bot sends itself also fire message_create; ignore them for this long.
 const BOT_ECHO_MS = 8000;
@@ -38,27 +39,11 @@ const lastBotSendAt = {}; // chat id -> timestamp of the bot's last message
 const actionsSummary = [];
 const allowReply = createRateLimiter(config.maxRepliesPerMinute, 60 * 1000);
 
-function loadActive() {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf-8")).autoReplyActive === true;
-  } catch {
-    return false;
-  }
-}
-
-function saveActive(value) {
-  try {
-    fs.writeFileSync(STATE_FILE, JSON.stringify({ autoReplyActive: value }));
-  } catch (error) {
-    console.log("Could not save state.json:", error.message);
-  }
-}
-
-let autoReplyActive = loadActive();
+let autoReplyActive = readActive(STATE_FILE);
 
 function setActive(value) {
   autoReplyActive = value;
-  saveActive(value);
+  writeActive(STATE_FILE, value);
 }
 
 async function sendBotMessage(chatId, text) {
@@ -93,11 +78,8 @@ async function handleOwnerMessage(msg) {
     );
   } else if (command === "/pending") {
     const items = recentFollowUps(10);
-    const lines = items.map(
-      (item) => `- ${item.name}${item.urgent ? " (PENTING)" : ""}: "${item.message}"`
-    );
     await msg.reply(
-      items.length ? `*Perlu ditindaklanjuti (10 terbaru)*\n${lines.join("\n")}` : "Tidak ada yang menunggu."
+      items.length ? `*Perlu ditindaklanjuti (10 terbaru)*\n${formatPending(items)}` : "Tidak ada yang menunggu."
     );
   } else if (command === "/help") {
     await msg.reply(HELP_TEXT);
@@ -123,10 +105,14 @@ async function handleIncomingMessage(message) {
   const result = await askAI(message.body, message.from);
 
   if (result.isUrgent) {
-    await sendBotMessage(
-      selfChatId(),
-      `*NOTIFIKASI PENTING*\nDari: ${senderName}\nPesan: ${message.body}\n\n_Bot sudah membalas, mungkin kamu mau cek._`
-    );
+    try {
+      await sendBotMessage(
+        selfChatId(),
+        `*NOTIFIKASI PENTING*\nDari: ${senderName}\nPesan: ${message.body}\n\n_Bot sudah membalas, mungkin kamu mau cek._`
+      );
+    } catch (error) {
+      console.log("Could not send the urgent alert:", error.message);
+    }
   }
 
   if (result.needsFollowUp && !result.failed) {
@@ -139,12 +125,14 @@ async function handleIncomingMessage(message) {
     });
   }
 
-  const typingMs = Math.max(MIN_TYPING_MS, result.text.length * TYPING_MS_PER_CHAR);
-  await new Promise((resolve) => setTimeout(resolve, typingMs));
-
-  await sendBotMessage(message.from, result.text);
-  logMessage(message.from, senderName, "out", result.text);
-  await chat.clearState();
+  try {
+    const typingMs = Math.max(MIN_TYPING_MS, result.text.length * TYPING_MS_PER_CHAR);
+    await new Promise((resolve) => setTimeout(resolve, typingMs));
+    await sendBotMessage(message.from, result.text);
+    logMessage(message.from, senderName, "out", result.text);
+  } finally {
+    await chat.clearState().catch(() => {});
+  }
 
   if (!result.failed) {
     actionsSummary.push({ name: senderName, asked: message.body.slice(0, 80), reply: result.text.slice(0, 80) });
@@ -157,10 +145,10 @@ function sendReport() {
     .map((a) => `- ${a.name}: "${a.asked}"\n  balasan: "${a.reply}"`)
     .join("\n");
   const report = `*LAPORAN ASISTEN ${config.ownerName.toUpperCase()}*\n\n${lines}\n\n_Semua sudah dibalas otomatis._`;
-  actionsSummary.length = 0;
-  sendBotMessage(selfChatId(), report).catch((error) =>
-    console.log("Could not send the report:", error.message)
-  );
+  const reported = actionsSummary.length;
+  sendBotMessage(selfChatId(), report)
+    .then(() => actionsSummary.splice(0, reported))
+    .catch((error) => console.log("Could not send the report, it will be retried:", error.message));
 }
 
 function startBot() {
@@ -215,7 +203,11 @@ function startBot() {
     restartBot();
   });
 
-  client.initialize();
+  client.initialize().catch((error) => {
+    console.log("WhatsApp client failed to start:", error.message);
+    isRestarting = false;
+    restartBot();
+  });
 }
 
 function restartBot() {

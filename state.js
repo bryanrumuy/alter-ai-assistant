@@ -13,7 +13,9 @@ function readActive(file) {
 
 function writeActive(file, active) {
   try {
-    fs.writeFileSync(file, JSON.stringify({ active }));
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ active }));
+    fs.renameSync(tmp, file);
   } catch (error) {
     console.log(`Could not save ${file}:`, error.message);
   }

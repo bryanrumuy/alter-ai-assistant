@@ -97,6 +97,14 @@ function createStore(file) {
       return Number(result.lastInsertRowid);
     },
 
+    countOpenOrders(channel, chatId) {
+      return Number(
+        db
+          .prepare("SELECT COUNT(*) c FROM orders WHERE channel = ? AND chat_id = ? AND status IN ('baru', 'diproses', 'siap')")
+          .get(channel, String(chatId)).c
+      );
+    },
+
     getOrder(id) {
       return toOrder(db.prepare("SELECT * FROM orders WHERE id = ?").get(id));
     },

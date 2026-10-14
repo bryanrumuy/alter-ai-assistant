@@ -17,3 +17,5 @@ alter.db
 alter.db-wal
 alter.db-shm
 brain.personal-backup.json
+whatsapp-state.json
+brain.telegram.json

@@ -8,26 +8,38 @@ const { parseReply, trimHistory, URGENT_TAG, NOTE_TAG } = require("./lib");
 const { loadMenu, priceOrder, formatRupiah, describeLines } = require("./menu");
 const { getStore } = require("./db");
 
-const MEMORY_FILE = path.join(config.dataDir, "brain.json");
+// WhatsApp and Telegram run as separate processes, so each keeps its own file and
+// neither can overwrite the other's chats.
+const MEMORY_FILES = {
+  telegram: path.join(config.dataDir, "brain.telegram.json"),
+  whatsapp: path.join(config.dataDir, "brain.json"),
+};
+const channelOf = (senderId) => (String(senderId).startsWith("tg:") ? "telegram" : "whatsapp");
 
-let histories = {};
-if (fs.existsSync(MEMORY_FILE)) {
+const memory = {};
+for (const [channel, file] of Object.entries(MEMORY_FILES)) {
+  memory[channel] = {};
+  if (!fs.existsSync(file)) continue;
   try {
-    histories = JSON.parse(fs.readFileSync(MEMORY_FILE, "utf-8"));
+    memory[channel] = JSON.parse(fs.readFileSync(file, "utf-8"));
   } catch {
-    console.log("Could not read brain.json, starting with empty memory.");
-    histories = {};
+    console.log(`Could not read ${path.basename(file)}, starting with empty memory.`);
   }
 }
 
-/** Writes through a temp file so a crash cannot leave a half-written brain.json. */
-function saveMemory() {
+const getHistory = (senderId) => memory[channelOf(senderId)][senderId] ?? [];
+
+/** Writes through a temp file so a crash cannot leave a half-written file. */
+function saveHistory(senderId, history) {
+  const channel = channelOf(senderId);
+  memory[channel][senderId] = history;
+  const file = MEMORY_FILES[channel];
   try {
-    const tmp = `${MEMORY_FILE}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(histories, null, 2));
-    fs.renameSync(tmp, MEMORY_FILE);
+    const tmp = `${file}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(memory[channel], null, 2));
+    fs.renameSync(tmp, file);
   } catch (error) {
-    console.log("Could not save brain.json:", error.message);
+    console.log(`Could not save ${path.basename(file)}:`, error.message);
   }
 }
 
@@ -36,7 +48,7 @@ const MAX_KNOWLEDGE_CHARS = 8000;
 /** Facts the owner wants the assistant to use, read fresh so edits apply without a restart. */
 function loadKnowledge() {
   try {
-    const file = path.join(__dirname, config.knowledgeFile);
+    const file = path.resolve(__dirname, config.knowledgeFile);
     return fs.readFileSync(file, "utf-8").trim().slice(0, MAX_KNOWLEDGE_CHARS);
   } catch {
     return "";
@@ -56,7 +68,7 @@ function currentTimeWib() {
 }
 
 /** Customer-service persona: answers only from the knowledge file, hands the rest to the team. */
-function buildBusinessPrompt() {
+function buildBusinessPrompt(menu) {
   const business = config.businessName;
   const knowledge = loadKnowledge();
   return `Kamu adalah asisten layanan pelanggan AI untuk ${business}. Waktu sekarang: ${currentTimeWib()} WIB.
@@ -77,12 +89,12 @@ ATURAN JAWABAN:
 PESAN DARURAT:
 Jika pelanggan dalam keadaan darurat atau masalah serius dan mendesak (kecelakaan, keluhan keselamatan, kerugian besar, ancaman), awali balasan dengan tepat ${URGENT_TAG}, tenangkan, dan bilang tim akan segera menghubungi. Jangan pakai ${URGENT_TAG} untuk pesan biasa.
 
-${orderingBlock()}INFORMASI RESMI:
+${orderingBlock(menu)}INFORMASI RESMI:
 ${knowledge || "(belum ada informasi, teruskan semua pertanyaan spesifik ke tim dengan " + NOTE_TAG + ")"}`;
 }
 
-function buildSystemPrompt() {
-  if (config.mode === "business") return buildBusinessPrompt();
+function buildSystemPrompt(menu) {
+  if (config.mode === "business") return buildBusinessPrompt(menu);
   const owner = config.ownerName;
   const knowledge = loadKnowledge();
   const knowledgeBlock = knowledge
@@ -132,9 +144,9 @@ CONTOH:
 const MAX_TOOL_ROUNDS = 3;
 const MAX_PICKUP_CHARS = 40;
 const MAX_NOTE_CHARS = 200;
+const MAX_OPEN_ORDERS_PER_CHAT = 3;
 
-function orderingBlock() {
-  const menu = loadMenu();
+function orderingBlock(menu) {
   if (menu.length === 0) return "";
   const lines = menu.map((item) => `- ${item.name}: ${formatRupiah(item.price)}`).join("\n");
   return `PEMESANAN (pickup saja):
@@ -181,16 +193,19 @@ function orderTool(menu) {
 }
 
 /** Runs create_order for real: validates against the menu, computes the total, stores the order. */
-function runCreateOrder(rawArguments, context, orders) {
+function runCreateOrder(rawArguments, context, orders, menu) {
   // One confirmed order per customer message: a model that loops must not create duplicates.
   if (orders.length > 0) return { error: "Pesanan sudah dibuat untuk pesan ini." };
+  if (getStore().countOpenOrders(context.channel, context.chatId) >= MAX_OPEN_ORDERS_PER_CHAT) {
+    return { error: "Pelanggan ini sudah punya terlalu banyak pesanan aktif. Minta mereka menunggu staf." };
+  }
   let args;
   try {
     args = JSON.parse(rawArguments || "{}");
   } catch {
     return { error: "Argumen tidak valid." };
   }
-  const priced = priceOrder(args.items, loadMenu());
+  const priced = priceOrder(args.items, menu);
   if (priced.error) return { error: priced.error };
   const pickupTime = String(args.pickup_time ?? "").trim().slice(0, MAX_PICKUP_CHARS);
   if (!pickupTime) return { error: "Jam ambil belum diisi." };
@@ -233,64 +248,78 @@ async function callModel(messages, tools) {
   return response.data?.choices?.[0]?.message ?? {};
 }
 
+/** Confirms an order that is already stored, used when the model's own final answer is missing. */
+function confirmationFor(order) {
+  return {
+    text: `Pesanan #${order.id} tercatat: ${describeLines(order.items)}, total ${formatRupiah(order.total)}, ambil ${order.pickupTime}.`,
+    isUrgent: false,
+    needsFollowUp: false,
+  };
+}
+
+/** Lets the model call create_order for a few rounds, then returns its final reply (or null). */
+async function runToolLoop(messages, tools, menu, context, orders) {
+  for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
+    const answer = await callModel(messages, round < MAX_TOOL_ROUNDS ? tools : null);
+    if (!answer.tool_calls?.length) return parseReply(answer.content, config.ownerName);
+    messages.push(answer);
+    for (const call of answer.tool_calls) {
+      const result =
+        call.function?.name === "create_order"
+          ? runCreateOrder(call.function.arguments, context, orders, menu)
+          : { error: "Fungsi tidak dikenal." };
+      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
+    }
+  }
+  return null;
+}
+
+async function answer(message, senderId, context) {
+  const pending = trimHistory([...getHistory(senderId), { role: "user", content: message }], config.maxHistory);
+  const failure = { text: config.fallbackReply, isUrgent: false, needsFollowUp: false, orders: [], failed: true };
+  const orders = []; // declared outside the try: an order stored before a later error must still be reported
+
+  let reply = null;
+  try {
+    const menu = config.mode === "business" && context ? loadMenu() : [];
+    const tools = menu.length ? [orderTool(menu)] : null;
+    const messages = [{ role: "system", content: buildSystemPrompt(menu) }, ...pending];
+    reply = await runToolLoop(messages, tools, menu, context, orders);
+  } catch (error) {
+    console.log("OpenAI error:", error.response?.data?.error?.message || error.message);
+  }
+
+  if (!reply?.text && orders.length > 0) reply = confirmationFor(orders[0]);
+  if (!reply?.text) return failure;
+
+  // Only successful turns are remembered, so a failed call leaves no orphan user message.
+  saveHistory(senderId, trimHistory([...pending, { role: "assistant", content: reply.text }], config.maxHistory));
+  return {
+    text: reply.text,
+    isUrgent: reply.isUrgent,
+    needsFollowUp: reply.needsFollowUp,
+    orders,
+    failed: false,
+  };
+}
+
+// Two quick messages from one customer are answered one after the other, so the second sees the
+// first in its history and the two cannot overwrite each other's memory.
+const queues = new Map();
+
 /**
  * Asks the model for a reply and keeps per-contact memory on disk.
  * `context` ({ channel, chatId, name }) switches on ordering in business mode.
  * Always resolves: on any API failure it returns the fallback text.
  */
-async function askAI(message, senderId, context = null) {
-  const history = histories[senderId] ?? [];
-  const pending = trimHistory([...history, { role: "user", content: message }], config.maxHistory);
-  const failure = { text: config.fallbackReply, isUrgent: false, needsFollowUp: false, orders: [], failed: true };
-
-  try {
-    const menu = config.mode === "business" && context ? loadMenu() : [];
-    const tools = menu.length ? [orderTool(menu)] : null;
-    const messages = [{ role: "system", content: buildSystemPrompt() }, ...pending];
-    const orders = [];
-
-    let reply = null;
-    for (let round = 0; round <= MAX_TOOL_ROUNDS && !reply; round += 1) {
-      const answer = await callModel(messages, round < MAX_TOOL_ROUNDS ? tools : null);
-      if (!answer.tool_calls?.length) {
-        reply = parseReply(answer.content);
-        break;
-      }
-      messages.push(answer);
-      for (const call of answer.tool_calls) {
-        const result =
-          call.function?.name === "create_order"
-            ? runCreateOrder(call.function.arguments, context, orders)
-            : { error: "Fungsi tidak dikenal." };
-        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
-      }
-    }
-    if (!reply?.text && orders.length > 0) {
-      // The order is already stored: confirm it ourselves instead of leaving the customer unsure.
-      const [order] = orders;
-      reply = {
-        text: `Pesanan #${order.id} tercatat: ${describeLines(order.items)}, total ${formatRupiah(order.total)}, ambil ${order.pickupTime}.`,
-        isUrgent: false,
-        needsFollowUp: false,
-      };
-    }
-    if (!reply?.text) return failure;
-
-    // Only successful turns are remembered, so a failed call leaves no orphan user message.
-    histories[senderId] = trimHistory([...pending, { role: "assistant", content: reply.text }], config.maxHistory);
-    saveMemory();
-
-    return {
-      text: reply.text,
-      isUrgent: reply.isUrgent,
-      needsFollowUp: reply.needsFollowUp,
-      orders,
-      failed: false,
-    };
-  } catch (error) {
-    console.log("OpenAI error:", error.response?.data?.error?.message || error.message);
-    return failure;
-  }
+function askAI(message, senderId, context = null) {
+  const run = (queues.get(senderId) ?? Promise.resolve()).then(() => answer(message, senderId, context));
+  const tail = run.catch(() => {});
+  queues.set(senderId, tail);
+  tail.then(() => {
+    if (queues.get(senderId) === tail) queues.delete(senderId);
+  });
+  return run;
 }
 
 module.exports = askAI;

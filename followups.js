@@ -40,4 +40,9 @@ function recentFollowUps(limit = 10) {
   }
 }
 
-module.exports = { recordFollowUp, recentFollowUps };
+/** One line per follow-up, the same wording on every channel. */
+function formatPending(items) {
+  return items.map((item) => `- ${item.name}${item.urgent ? " (PENTING)" : ""}: "${item.message}"`).join("\n");
+}
+
+module.exports = { recordFollowUp, recentFollowUps, formatPending };

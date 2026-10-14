@@ -8,7 +8,7 @@ An assistant that answers WhatsApp chats on your behalf while you are busy. It i
 - Replies to private chats with a short, in-character message (groups and statuses are ignored).
 - Remembers the last messages of each contact, stored in `brain.json`.
 - Flags urgent messages: the model tags them and the bot forwards an alert to your own chat.
-- Logs messages that need you (left messages, requests, questions only you can answer) to `followups.jsonl`, and optionally to a Google Sheet through `SHEETS_WEBHOOK_URL`. Send `/pending` to see the latest ones.
+- Logs messages that need you (left messages, requests, questions only you can answer) to the SQLite database (`alter.db`), and optionally to a Google Sheet through `SHEETS_WEBHOOK_URL`. Send `/pending` to see the latest ones.
 - Answers from your own facts: put FAQ or business info in `knowledge.md` (see `knowledge.example.md`) and the assistant uses only that for questions about you.
 - Pauses itself in a chat for a while after you reply by hand (`MANUAL_PAUSE_MINUTES`).
 - Sends a summary of what it answered to your own chat on a schedule (`REPORT_CRON`).
@@ -34,7 +34,7 @@ An assistant that answers WhatsApp chats on your behalf while you are busy. It i
 
 ## Setup
 
-1. Install Node.js 18 or newer, then run `npm install`.
+1. Install Node.js 22.13 or newer (the built-in `node:sqlite` is used), then run `npm install`.
 2. Copy `.env.example` to `.env` and set `OPENAI_API_KEY`.
 3. Run `npm start`, scan the QR code with WhatsApp (Linked devices), and wait for "Bot ready".
 
@@ -54,7 +54,7 @@ The bot starts switched off. Send `/on` when you want it to answer.
 
 ## Tests and evaluation
 
-- `npm test` runs the unit tests for the reply parsing, pause window, rate limiter and history trimming.
+- `npm test` runs the automated tests: reply parsing, rate limiter, history, the database, menu pricing, the order tool loop (with a stubbed model), the Telegram logic and the dashboard API (login, anti-forgery header, host check, login throttling).
 - `npm run eval` sends 20 test chats to the real model (greetings, questions only the owner can answer, general knowledge, an emergency, prompt-injection attempts, English) and checks each reply. It needs `OPENAI_API_KEY` and makes about 20 API calls. The checks are written by the author for this project, so read the result as a regression check, not a benchmark.
 
 ## Google Sheets (optional)
@@ -63,15 +63,15 @@ Create a Google Apps Script web app whose `doPost(e)` appends `JSON.parse(e.post
 
 ## Run it on a server with Docker
 
-The bot only answers while it is running, so for 24/7 use it needs a machine that stays on (a small VPS, Railway or Fly.io; Docker only packages the app, it does not provide the machine).
+The bots only answer while they are running, so for 24/7 use they need a machine that stays on (a small VPS, Railway or Fly.io; Docker only packages the app, it does not provide the machine). The compose file is untested on the author's machine, so treat it as a starting point.
 
 1. Copy the project and your `.env` to the server.
-2. `docker compose up -d --build`
-3. First start only: `docker compose logs -f`, scan the QR code that is printed, and wait for "Bot ready".
+2. `docker compose up -d --build` starts three services from one image: `whatsapp`, `telegram` and `dashboard` (published on `127.0.0.1:3100` only; put HTTPS in front of it before exposing it, and add its public hostname to `DASHBOARD_ALLOWED_HOSTS`).
+3. First start only: `docker compose logs -f whatsapp`, scan the QR code that is printed, and wait for "Bot ready". Run only the services you need, for example `docker compose up -d telegram dashboard`.
 
-The WhatsApp session, chat memory and follow-ups live in the `bot-data` volume, so restarts do not need a new QR scan.
+The containers run as an unprivileged user. The WhatsApp session, chat memory, database and on/off switches live in the `bot-data` volume, so restarts do not need a new QR scan.
 
 ## Notes
 
 - `whatsapp-web.js` automates WhatsApp Web and is not an official API. Use it on your own account at your own risk.
-- `brain.json` holds real chat content. It is git-ignored: never publish it.
+- `brain.json`, `brain.telegram.json` and `alter.db` hold real chat content. They are git-ignored: never publish them.

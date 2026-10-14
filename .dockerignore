@@ -14,3 +14,5 @@ telegram-state.json
 alter.db
 alter.db-wal
 alter.db-shm
+whatsapp-state.json
+brain.telegram.json

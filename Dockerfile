@@ -15,5 +15,10 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
 
+# Run as the unprivileged "node" user; /data is the only place that has to be writable.
+RUN mkdir -p /data && chown -R node:node /data
+USER node
+
 VOLUME /data
+# Default: the WhatsApp bot. docker-compose.yml starts the Telegram bot and the dashboard from the same image.
 CMD ["node", "bot.js"]

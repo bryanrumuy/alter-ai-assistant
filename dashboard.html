@@ -3,63 +3,221 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Alter Dashboard</title>
 <style>
-  :root { color-scheme: light dark; --bg:#f6f7fb; --card:#fff; --text:#16181d; --muted:#667085; --line:#e4e7ee; --accent:#5b3df5; --danger:#d92d20; --ok:#12805c; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#181b22; --text:#eceef3; --muted:#9aa3b2; --line:#2a2f3a; --accent:#8b7bff; --danger:#ff6b60; --ok:#4cc38a; } }
-  * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); background:var(--card); }
-  h1 { font-size:18px; margin:0; }
-  main { max-width:960px; margin:0 auto; padding:20px 16px 48px; }
-  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:20px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-  .stat b { display:block; font-size:26px; }
-  .stat span { color:var(--muted); font-size:13px; }
-  nav { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
-  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:8px; padding:8px 14px; }
-  button:hover { border-color:var(--accent); }
-  button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-  button.small { padding:4px 10px; font-size:13px; }
-  .row { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px; }
-  .row .grow { flex:1; min-width:0; }
-  .tag { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--muted); }
-  .tag.urgent { color:var(--danger); border-color:var(--danger); }
-  .muted { color:var(--muted); font-size:13px; }
-  .msg { padding:8px 12px; border-radius:12px; margin:6px 0; max-width:85%; white-space:pre-wrap; overflow-wrap:anywhere; }
-  .msg.in { background:var(--bg); border:1px solid var(--line); }
-  .msg.out { background:var(--accent); color:#fff; margin-left:auto; }
-  textarea { width:100%; min-height:260px; font:14px/1.5 ui-monospace, monospace; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:10px; }
-  .status { font-size:14px; }
-  .status.active { color:var(--ok); } .status.off { color:var(--danger); }
-  .empty { color:var(--muted); padding:24px; text-align:center; }
-  .pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; }
-  .actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-  .tag.ready { color:var(--ok); border-color:var(--ok); }
-  .reply { margin-top:8px; }
+  /* ---------- Design tokens ---------- */
+  :root {
+    color-scheme: light dark;
+    --bg:#eef2f1; --surface:#ffffff; --surface-2:#f6f9f8; --line:#d9e2df; --line-strong:#b9c7c3;
+    --text:#10201d; --muted:#4d6460;
+    --brand:#0b6b61; --brand-strong:#084f48; --on-brand:#ffffff; --brand-soft:#dcf1ed;
+    --new:#8a4b00; --new-bg:#fff0d6; --new-line:#f0c987;
+    --prog:#1d4ed8; --prog-bg:#e3ecff; --prog-line:#aac1f5;
+    --ready:#0b6b3a; --ready-bg:#dcf5e5; --ready-line:#9bd7b2;
+    --danger:#b42318; --danger-bg:#fde8e6; --danger-line:#f1a9a2;
+    --focus:#1d4ed8;
+    --shadow:0 1px 2px rgba(16,32,29,.06), 0 4px 14px rgba(16,32,29,.05);
+    --radius:14px; --radius-sm:9px;
+    --font:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono:ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+    --ease:cubic-bezier(.2,.7,.2,1);
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg:#0b1110; --surface:#131c1a; --surface-2:#18231f; --line:#25332f; --line-strong:#3a4d47;
+    --text:#e8f1ee; --muted:#9db3ae;
+    --brand:#35c9b6; --brand-strong:#5fe0cf; --on-brand:#04201c; --brand-soft:#12332e;
+    --new:#ffc46b; --new-bg:#33260c; --new-line:#6b4c15;
+    --prog:#9db9ff; --prog-bg:#16224a; --prog-line:#2f4a9a;
+    --ready:#6fdc9a; --ready-bg:#10301f; --ready-line:#21603c;
+    --danger:#ff8f84; --danger-bg:#3a1613; --danger-line:#7a2c26;
+    --focus:#9db9ff;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.25);
+  } }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; font:15px/1.5 var(--font); background:var(--bg); color:var(--text); min-height:100vh; }
+  h1, h2, h3, p { margin:0; }
+  button, textarea { font:inherit; color:inherit; }
+  :focus-visible { outline:3px solid var(--focus); outline-offset:2px; border-radius:6px; }
+  .sr-only { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+  .skip { position:absolute; left:12px; top:-60px; background:var(--brand); color:var(--on-brand); padding:10px 14px; border-radius:8px; z-index:100; }
+  .skip:focus { top:12px; }
+  svg.ic { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* ---------- Header ---------- */
+  header { background:var(--surface); border-bottom:1px solid var(--line); }
+  .bar { max-width:1180px; margin:0 auto; padding:14px 16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; }
+  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+  .mark { width:40px; height:40px; border-radius:12px; background:var(--brand); color:var(--on-brand); display:grid; place-items:center; flex:none; }
+  .mark svg { width:24px; height:24px; }
+  h1 { font-size:18px; line-height:1.2; letter-spacing:-.01em; }
+  .brand p { color:var(--muted); font-size:13px; }
+  .controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:6px 12px; border-radius:999px; font-size:13px; font-weight:600; border:1px solid var(--line-strong); background:var(--surface-2); }
+  .pill .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); }
+  .pill.active { color:var(--ready); border-color:var(--ready-line); background:var(--ready-bg); }
+  .pill.active .dot { background:var(--ready); box-shadow:0 0 0 0 var(--ready); animation:pulse 2.4s var(--ease) infinite; }
+  .pill.off { color:var(--danger); border-color:var(--danger-line); background:var(--danger-bg); }
+  .pill.off .dot { background:var(--danger); }
+  @keyframes pulse { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--ready) 55%, transparent); } 70%,100% { box-shadow:0 0 0 7px transparent; } }
+
+  /* ---------- Buttons ---------- */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:8px 16px; border-radius:var(--radius-sm); border:1px solid var(--line-strong); background:var(--surface); font-weight:600; cursor:pointer; touch-action:manipulation; transition:background .15s, border-color .15s, transform .1s; }
+  .btn:hover { border-color:var(--brand); background:var(--surface-2); }
+  .btn:active { transform:translateY(1px); }
+  .btn.primary { background:var(--brand); border-color:var(--brand); color:var(--on-brand); }
+  .btn.primary:hover { background:var(--brand-strong); border-color:var(--brand-strong); }
+  .btn.danger { color:var(--danger); border-color:var(--danger-line); }
+  .btn.danger:hover { background:var(--danger-bg); border-color:var(--danger); }
+  .btn.sm { min-height:44px; padding:6px 12px; font-size:14px; }
+  .btn:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+  @media (min-width:900px) and (pointer:fine) { .btn.sm { min-height:34px; } }
+
+  /* ---------- Layout ---------- */
+  main { max-width:1180px; margin:0 auto; padding:20px 16px 56px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:22px; }
+  .kpi { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px; }
+  .kpi .top { display:flex; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; font-weight:600; }
+  .kpi .top .ic { color:var(--brand); }
+  .kpi b { font-size:28px; line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+  .kpi.money b { font-size:24px; }
+  .kpi.hot { border-color:var(--danger-line); background:var(--danger-bg); }
+  .kpi.hot .top, .kpi.hot .top .ic, .kpi.hot b { color:var(--danger); }
+  .kpi.lead { background:var(--brand); border-color:var(--brand); color:var(--on-brand); }
+  .kpi.lead .top, .kpi.lead .top .ic { color:var(--on-brand); opacity:.92; }
+  @media (min-width:1000px) { .kpis { grid-template-columns:1.25fr 1.25fr repeat(5,1fr); } }
+
+  /* ---------- Tabs ---------- */
+  [role=tablist] { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--line-strong); overflow-x:auto; scrollbar-width:thin; }
+  [role=tab] { display:inline-flex; align-items:center; gap:8px; min-height:48px; padding:8px 16px; border:0; border-bottom:3px solid transparent; margin-bottom:-1px; background:none; color:var(--muted); font-weight:600; cursor:pointer; white-space:nowrap; border-radius:8px 8px 0 0; }
+  [role=tab]:hover { color:var(--text); background:var(--surface-2); }
+  [role=tab][aria-selected=true] { color:var(--brand); border-bottom-color:var(--brand); }
+  .count { min-width:22px; padding:0 7px; border-radius:999px; background:var(--surface-2); border:1px solid var(--line-strong); font-size:12px; line-height:20px; text-align:center; font-variant-numeric:tabular-nums; color:var(--text); }
+  .count.alert { background:var(--danger-bg); border-color:var(--danger-line); color:var(--danger); }
+  .count[hidden] { display:none; }
+  #view { min-height:240px; }
+  #view > * { animation:enter .22s var(--ease) both; }
+  @keyframes enter { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+
+  /* ---------- Cards / board ---------- */
+  .board { display:grid; grid-template-columns:1fr; gap:16px; align-items:start; }
+  @media (min-width:900px) { .board { grid-template-columns:repeat(3,1fr); } }
+  .col { background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:12px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .col-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:2px 2px 4px; }
+  .col-head h2 { font-size:15px; display:flex; align-items:center; gap:8px; }
+  .col-empty { color:var(--muted); font-size:14px; text-align:center; padding:22px 8px; border:1px dashed var(--line-strong); border-radius:var(--radius-sm); }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .card.urgent { border-left:5px solid var(--danger); }
+  .card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; }
+  .who { display:flex; align-items:center; gap:10px; min-width:0; }
+  .avatar { width:36px; height:36px; border-radius:50%; background:var(--brand-soft); color:var(--brand); display:grid; place-items:center; font-weight:700; flex:none; }
+  .who strong { display:block; overflow-wrap:anywhere; }
+  .meta { color:var(--muted); font-size:13px; }
+  .text { white-space:pre-wrap; overflow-wrap:anywhere; }
+  .quote { background:var(--surface-2); border-left:3px solid var(--brand); border-radius:6px; padding:8px 10px; font-size:14px; color:var(--muted); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .items { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:2px; }
+  .items li { display:flex; gap:8px; overflow-wrap:anywhere; }
+  .items li b { font-variant-numeric:tabular-nums; min-width:28px; color:var(--brand); }
+  .total { display:flex; justify-content:space-between; gap:8px; padding-top:8px; border-top:1px dashed var(--line-strong); font-weight:700; font-variant-numeric:tabular-nums; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .feedback { font-size:13px; color:var(--muted); }
+
+  /* ---------- Badges ---------- */
+  .badge { display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:700; border:1px solid var(--line-strong); color:var(--muted); background:var(--surface-2); }
+  .badge .ic { width:13px; height:13px; }
+  .badge.baru { color:var(--new); background:var(--new-bg); border-color:var(--new-line); }
+  .badge.diproses { color:var(--prog); background:var(--prog-bg); border-color:var(--prog-line); }
+  .badge.siap { color:var(--ready); background:var(--ready-bg); border-color:var(--ready-line); }
+  .badge.urgent { color:var(--danger); background:var(--danger-bg); border-color:var(--danger-line); }
+
+  /* ---------- Lists ---------- */
+  .stack { display:grid; gap:12px; grid-template-columns:1fr; }
+  @media (min-width:900px) { .stack.two { grid-template-columns:1fr 1fr; } }
+  .reply { display:flex; flex-direction:column; gap:8px; padding-top:4px; }
   .reply[hidden] { display:none; }
-  .reply textarea { min-height:70px; font-family:inherit; }
+  label { font-weight:600; font-size:14px; }
+  textarea { width:100%; min-height:90px; padding:10px 12px; background:var(--surface); border:1px solid var(--line-strong); border-radius:var(--radius-sm); line-height:1.5; resize:vertical; }
+  textarea.mono { min-height:300px; font:14px/1.6 var(--mono); }
+  textarea:focus-visible { outline-offset:0; }
+  .chat-row { cursor:pointer; text-align:left; width:100%; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; box-shadow:var(--shadow); display:flex; gap:12px; align-items:center; transition:border-color .15s; }
+  .chat-row:hover { border-color:var(--brand); }
+  .chat-row .body { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .chat-row .preview { color:var(--muted); font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .viewer { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); }
+  .viewer-head { display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .viewer-head h2 { font-size:16px; }
+  .thread { padding:16px 14px; display:flex; flex-direction:column; gap:10px; max-height:65vh; overflow-y:auto; background:var(--surface-2); }
+  .bubble { max-width:min(560px,85%); padding:9px 13px; border-radius:16px; white-space:pre-wrap; overflow-wrap:anywhere; display:flex; flex-direction:column; gap:3px; }
+  .bubble time { font-size:11.5px; opacity:.8; }
+  .bubble.in { background:var(--surface); border:1px solid var(--line-strong); border-bottom-left-radius:4px; align-self:flex-start; }
+  .bubble.out { background:var(--brand); color:var(--on-brand); border-bottom-right-radius:4px; align-self:flex-end; }
+  .bubble .who-label { font-size:12px; font-weight:700; opacity:.85; }
+  .help { color:var(--muted); font-size:14px; max-width:68ch; }
+  .editor { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:10px; }
+  .editor-foot { display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:space-between; }
+
+  /* ---------- Empty / error / skeleton ---------- */
+  .empty { background:var(--surface); border:1px dashed var(--line-strong); border-radius:var(--radius); padding:40px 20px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .empty .art { width:52px; height:52px; border-radius:16px; background:var(--brand-soft); color:var(--brand); display:grid; place-items:center; }
+  .empty .art svg { width:26px; height:26px; }
+  .empty h2 { font-size:17px; }
+  .empty p { color:var(--muted); max-width:46ch; }
+  .empty.error .art { background:var(--danger-bg); color:var(--danger); }
+  .skel { background:linear-gradient(90deg, var(--surface-2) 25%, var(--line) 50%, var(--surface-2) 75%); background-size:200% 100%; border-radius:var(--radius-sm); animation:shimmer 1.4s linear infinite; }
+  @keyframes shimmer { from { background-position:200% 0; } to { background-position:-200% 0; } }
+  .skel-card { height:118px; }
+
+  /* ---------- Toasts ---------- */
+  #toasts { position:fixed; right:16px; bottom:16px; left:16px; display:flex; flex-direction:column; gap:8px; align-items:flex-end; z-index:50; pointer-events:none; }
+  .toast { pointer-events:auto; max-width:420px; background:var(--text); color:var(--bg); padding:11px 14px; border-radius:var(--radius-sm); box-shadow:0 8px 24px rgba(0,0,0,.28); display:flex; gap:10px; align-items:flex-start; animation:enter .2s var(--ease) both; overflow-wrap:anywhere; }
+  .toast.error { background:var(--danger); color:#fff; }
+  @media (prefers-color-scheme: dark) { .toast.error { background:#7a2c26; color:#fff; } }
+
+  @media (max-width:520px) {
+    .bar { padding:12px; } main { padding:16px 12px 56px; }
+    .controls { width:100%; justify-content:space-between; }
+    .kpi b { font-size:24px; }
+    .actions .btn { flex:1 1 auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+  }
 </style>
 </head>
 <body>
+<a class="skip" href="#view">Lewati ke konten</a>
 <header>
-  <h1>Alter Dashboard</h1>
-  <div><span id="status" class="status"></span> <button id="toggle" class="small"></button></div>
+  <div class="bar">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" class="ic" style="stroke-width:2.2"><path d="M4 19 12 4l8 15"/><path d="M8 14h8"/></svg></div>
+      <div>
+        <h1>Alter Dashboard</h1>
+        <p>Konsol operasional asisten pelanggan</p>
+      </div>
+    </div>
+    <div class="controls">
+      <span id="status" class="pill" role="status"><span class="dot" aria-hidden="true"></span><span id="status-text">Memuat...</span></span>
+      <button id="toggle" class="btn sm" type="button" disabled>Matikan</button>
+    </div>
+  </div>
 </header>
 <main>
-  <section class="stats" id="stats" aria-label="Ringkasan"></section>
-  <nav aria-label="Bagian">
-    <button data-tab="orders" class="on">Pesanan</button>
-    <button data-tab="followups">Tindak lanjut</button>
-    <button data-tab="chats">Percakapan</button>
-    <button data-tab="knowledge">Pengetahuan</button>
-  </nav>
-  <div id="view" class="card" aria-live="polite"></div>
+  <section class="kpis" id="stats" aria-label="Ringkasan"></section>
+  <div role="tablist" aria-label="Bagian dashboard" id="tabs">
+    <button role="tab" id="tab-orders" aria-controls="view" aria-selected="true" data-tab="orders" tabindex="0">Pesanan <span class="count" id="count-orders" hidden></span></button>
+    <button role="tab" id="tab-followups" aria-controls="view" aria-selected="false" data-tab="followups" tabindex="-1">Tindak lanjut <span class="count alert" id="count-followups" hidden></span></button>
+    <button role="tab" id="tab-chats" aria-controls="view" aria-selected="false" data-tab="chats" tabindex="-1">Percakapan</button>
+    <button role="tab" id="tab-knowledge" aria-controls="view" aria-selected="false" data-tab="knowledge" tabindex="-1">Pengetahuan</button>
+  </div>
+  <div id="view" role="tabpanel" aria-labelledby="tab-orders" tabindex="-1"></div>
 </main>
+<div id="toasts" aria-hidden="false"></div>
+<div id="announce" class="sr-only" role="status" aria-live="polite"></div>
 <script>
 "use strict";
 const HEADERS = { "Content-Type": "application/json", "X-Requested-With": "alter-dashboard" };
-const state = { tab: "orders", chat: null, active: false };
+const state = { tab: "orders", chat: null, active: false, rendered: "" };
 
 async function api(path, options) {
   const response = await fetch(path, { ...options, headers: HEADERS });
@@ -78,153 +236,299 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-const time = (iso) => new Date(iso).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+/* ---------- Icons: static path data only, never customer text ---------- */
+const ICONS = {
+  bag: "M6 7h12l1 13H5L6 7Zm3 0a3 3 0 0 1 6 0",
+  cash: "M3 7h18v10H3zM12 12m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0",
+  inbox: "M3 13l3-8h12l3 8v6H3v-6Zm0 0h5l1 3h6l1-3h5",
+  chat: "M4 5h16v11H9l-5 4V5Z",
+  flag: "M5 21V4m0 0h12l-2 4 2 4H5",
+  alert: "M12 4 2.5 20h19L12 4Zm0 6v5m0 3v.01",
+  check: "M5 12.5l4.5 4.5L19 7.5",
+  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-14v5l3 2",
+  back: "M15 5l-7 7 7 7",
+  book: "M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4V4Zm0 12a4 4 0 0 1 4-4h10",
+  send: "M4 12 20 4l-6 16-3-7-7-1Z",
+};
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", "ic");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", ICONS[name]);
+  svg.append(path);
+  return svg;
+}
 
+const time = (iso) => new Date(iso).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+const clock = (iso) => new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+const rupiah = (n) => "Rp" + Number(n).toLocaleString("id-ID");
+const initial = (name) => (String(name || "?").trim()[0] || "?").toUpperCase();
+
+/* ---------- Feedback: toasts + screen-reader announcements ---------- */
+function toast(message, kind = "ok") {
+  const node = el("div", { class: "toast " + kind }, message);
+  const box = document.getElementById("toasts");
+  box.append(node);
+  document.getElementById("announce").textContent = message;
+  setTimeout(() => node.remove(), kind === "error" ? 7000 : 3800);
+}
+
+/* ---------- Header + KPIs ---------- */
 function renderStats(stats) {
   const items = [
-    ["Pesanan aktif", stats.activeOrders],
-    ["Omzet 24 jam", "Rp" + stats.revenueToday.toLocaleString("id-ID")],
-    ["Pesan masuk 24 jam", stats.messagesToday],
-    ["Total percakapan", stats.chatsTotal],
-    ["Perlu ditindaklanjuti", stats.openFollowUps],
-    ["Urgent", stats.openUrgent],
-    ["Sudah selesai", stats.resolvedFollowUps],
+    ["Pesanan aktif", stats.activeOrders, "bag", "lead"],
+    ["Omzet 24 jam", rupiah(stats.revenueToday), "cash", "money"],
+    ["Pesan masuk 24 jam", stats.messagesToday, "inbox", ""],
+    ["Total percakapan", stats.chatsTotal, "chat", ""],
+    ["Perlu ditindaklanjuti", stats.openFollowUps, "flag", ""],
+    ["Urgent", stats.openUrgent, "alert", stats.openUrgent > 0 ? "hot" : ""],
+    ["Sudah selesai", stats.resolvedFollowUps, "check", ""],
   ];
   document.getElementById("stats").replaceChildren(
-    ...items.map(([label, value]) => el("div", { class: "card stat" }, el("b", {}, String(value)), el("span", {}, label)))
+    ...items.map(([label, value, ic, cls]) =>
+      el("div", { class: "kpi " + cls }, el("div", { class: "top" }, label, icon(ic)), el("b", {}, String(value))))
   );
+  setCount("count-orders", stats.activeOrders, "pesanan aktif");
+  setCount("count-followups", stats.openFollowUps, "perlu ditindaklanjuti");
+}
+
+function setCount(id, value, label) {
+  const node = document.getElementById(id);
+  node.hidden = !value;
+  node.textContent = String(value);
+  if (value) node.setAttribute("aria-label", value + " " + label);
 }
 
 function renderStatus(active) {
   state.active = active;
-  const status = document.getElementById("status");
-  status.textContent = active ? "Bot aktif" : "Bot mati";
-  status.className = `status ${active ? "active" : "off"}`;
-  document.getElementById("toggle").textContent = active ? "Matikan" : "Aktifkan";
+  document.getElementById("status").className = "pill " + (active ? "active" : "off");
+  document.getElementById("status-text").textContent = active ? "Bot aktif" : "Bot mati";
+  const toggle = document.getElementById("toggle");
+  toggle.textContent = active ? "Matikan bot" : "Aktifkan bot";
+  toggle.disabled = false;
 }
 
+/* ---------- Shared pieces ---------- */
+function channelBadge(channel) { return el("span", { class: "badge" }, channel); }
+
+function emptyState(iconName, title, text, kind = "") {
+  return el("div", { class: "empty " + kind }, el("div", { class: "art" }, icon(iconName)), el("h2", {}, title), el("p", {}, text));
+}
+
+function skeleton() {
+  return el("div", { class: "stack two", "aria-hidden": "true" }, ...[0, 1, 2, 3].map(() => el("div", { class: "skel skel-card" })));
+}
+
+/* Render a view; on a tab change the previous content is replaced by a skeleton first. */
+function show(view, key, ...nodes) {
+  state.rendered = key;
+  view.removeAttribute("aria-busy");
+  view.replaceChildren(...nodes);
+}
+
+/* ---------- Orders: kanban board ---------- */
 const NEXT_STATUS = { baru: ["diproses", "Proses"], diproses: ["siap", "Siap diambil"], siap: ["selesai", "Selesai"] };
+const COLUMNS = [["baru", "Baru", "inbox"], ["diproses", "Diproses", "clock"], ["siap", "Siap diambil", "check"]];
 
 async function showOrders(view) {
   const { orders } = await api("/api/orders");
-  if (!orders.length) return view.replaceChildren(el("div", { class: "empty" }, "Belum ada pesanan aktif."));
-  view.replaceChildren(...orders.map(orderRow));
+  if (!orders.length) {
+    return show(view, "orders", emptyState("bag", "Belum ada pesanan aktif", "Pesanan baru dari pelanggan akan muncul di sini dan memperbarui diri setiap 10 detik."));
+  }
+  const columns = COLUMNS.map(([status, label, ic]) => {
+    const list = orders.filter((order) => order.status === status);
+    return el("section", { class: "col", "aria-labelledby": "col-" + status },
+      el("div", { class: "col-head" }, el("h2", { id: "col-" + status }, icon(ic), label), el("span", { class: "count" }, String(list.length))),
+      ...(list.length ? list.map(orderCard) : [el("p", { class: "col-empty" }, "Tidak ada pesanan " + label.toLowerCase() + ".")]));
+  });
+  // Statuses outside the three columns (should not happen) still show up rather than vanish.
+  const known = COLUMNS.map((c) => c[0]);
+  const other = orders.filter((order) => !known.includes(order.status));
+  if (other.length) columns.push(el("section", { class: "col", "aria-label": "Lainnya" }, ...other.map(orderCard)));
+  show(view, "orders", el("div", { class: "board" }, ...columns));
 }
 
-async function setOrderStatus(order, status, note) {
-  note.textContent = " Memproses...";
+async function setOrderStatus(order, status, note, buttons) {
+  buttons.forEach((b) => { b.disabled = true; });
+  note.textContent = "Memproses...";
   try {
     const result = await api("/api/orders/status", { method: "POST", body: JSON.stringify({ id: order.id, status }) });
-    if (result.notifyError) alert("Status diubah, tapi pelanggan belum diberi tahu: " + result.notifyError);
+    if (result.notifyError) toast("Status diubah, tapi pelanggan belum diberi tahu: " + result.notifyError, "error");
+    else toast("Pesanan #" + order.id + (status === "batal" ? " dibatalkan." : " diperbarui menjadi " + status + "."));
     refresh(true);
   } catch (error) {
-    note.textContent = " Gagal: " + error.message;
+    buttons.forEach((b) => { b.disabled = false; });
+    note.textContent = "";
+    toast("Gagal mengubah pesanan #" + order.id + ": " + error.message, "error");
   }
 }
 
-function orderRow(order) {
-  const note = el("span", { class: "muted" });
+function orderCard(order) {
+  const note = el("span", { class: "feedback" });
   const buttons = [];
   const next = NEXT_STATUS[order.status];
   if (next) {
-    const advance = el("button", { class: "small on" }, next[1]);
-    advance.addEventListener("click", () => setOrderStatus(order, next[0], note));
+    const advance = el("button", { class: "btn sm primary", type: "button" }, next[1]);
+    advance.addEventListener("click", () => setOrderStatus(order, next[0], note, buttons));
     buttons.push(advance);
   }
-  const cancel = el("button", { class: "small" }, "Batalkan");
-  cancel.addEventListener("click", () => { if (confirm("Batalkan pesanan #" + order.id + "? Pelanggan akan diberi tahu.")) setOrderStatus(order, "batal", note); });
+  const cancel = el("button", { class: "btn sm danger", type: "button" }, "Batalkan");
+  cancel.addEventListener("click", () => {
+    if (confirm("Batalkan pesanan #" + order.id + "? Pelanggan akan diberi tahu.")) setOrderStatus(order, "batal", note, buttons);
+  });
   buttons.push(cancel);
-  const lines = order.items.map((item) => item.quantity + "x " + item.name).join(", ");
-  return el("div", { class: "row" },
-    el("div", { class: "grow" },
-      el("div", {}, el("strong", {}, "#" + order.id + " " + order.name), " ", el("span", { class: "tag" }, order.channel), " ",
-        el("span", { class: "tag " + (order.status === "siap" ? "ready" : "") }, order.status), " ", el("span", { class: "muted" }, time(order.ts))),
-      el("p", { class: "pre" }, lines),
-      el("p", { class: "pre muted" }, "Total Rp" + order.total.toLocaleString("id-ID") + ", ambil " + order.pickup_time + (order.note ? ", catatan: " + order.note : ""))),
+  return el("article", { class: "card", "aria-label": "Pesanan #" + order.id + " atas nama " + order.name },
+    el("div", { class: "card-top" },
+      el("div", { class: "who" }, el("div", { class: "avatar", "aria-hidden": "true" }, initial(order.name)),
+        el("div", {}, el("strong", {}, order.name), el("span", { class: "meta" }, "#" + order.id + " | " + time(order.ts)))),
+      el("div", { class: "actions" }, channelBadge(order.channel), el("span", { class: "badge " + order.status }, order.status))),
+    el("ul", { class: "items" }, ...order.items.map((item) => el("li", {}, el("b", {}, item.quantity + "x"), el("span", {}, item.name)))),
+    el("div", { class: "total" }, el("span", {}, "Total"), el("span", {}, rupiah(order.total))),
+    el("p", { class: "meta" }, "Ambil: " + order.pickup_time),
+    order.note ? el("p", { class: "quote" }, "Catatan: " + order.note) : "",
     el("div", { class: "actions" }, ...buttons, note));
 }
 
+/* ---------- Follow-ups ---------- */
 async function showFollowUps(view) {
   const { items } = await api("/api/followups");
-  if (!items.length) return view.replaceChildren(el("div", { class: "empty" }, "Tidak ada yang menunggu."));
-  view.replaceChildren(...items.map(followUpRow));
+  if (!items.length) {
+    return show(view, "followups", emptyState("check", "Semua sudah ditangani", "Tidak ada pelanggan yang menunggu balasan. Keluhan yang dieskalasi bot akan muncul di sini."));
+  }
+  const sorted = [...items].sort((a, b) => Number(b.urgent) - Number(a.urgent));
+  show(view, "followups", el("div", { class: "stack two" }, ...sorted.map(followUpCard)));
 }
 
-function followUpRow(item) {
+function followUpCard(item) {
   const form = el("div", { class: "reply", hidden: "" });
-  const note = el("span", { class: "muted" });
-  const input = el("textarea", { "aria-label": "Balasan untuk " + item.name, maxlength: "1000", placeholder: "Tulis balasan untuk pelanggan..." });
-  input.style.minHeight = "70px";
-  const send = el("button", { class: "small on" }, "Kirim");
+  const note = el("span", { class: "feedback" });
+  const inputId = "reply-" + item.id;
+  const input = el("textarea", { id: inputId, maxlength: "1000", placeholder: "Tulis balasan untuk pelanggan..." });
+  const send = el("button", { class: "btn sm primary", type: "button" }, el("span", {}, "Kirim balasan"));
+  send.prepend(icon("send"));
   send.addEventListener("click", async () => {
     send.disabled = true;
-    note.textContent = " Mengirim...";
+    note.textContent = "Mengirim...";
     try {
       await api("/api/followups/reply", { method: "POST", body: JSON.stringify({ id: item.id, text: input.value }) });
       // Clear the draft first: the timer refresh skips a view that still holds unsent text.
       input.value = "";
       input.blur();
       form.hidden = true;
+      toast("Balasan terkirim ke " + item.name + ".");
       refresh(true);
     } catch (error) {
       send.disabled = false;
-      note.textContent = " Gagal: " + error.message;
+      note.textContent = "";
+      toast("Balasan gagal dikirim: " + error.message, "error");
     }
   });
-  form.append(input, el("div", {}, send, note));
-  const replyButton = el("button", { class: "small" }, "Balas");
-  replyButton.addEventListener("click", () => { form.hidden = !form.hidden; if (!form.hidden) input.focus(); });
-  const doneButton = el("button", { class: "small" }, "Selesai");
-  doneButton.addEventListener("click", async () => {
-    await api("/api/followups/done", { method: "POST", body: JSON.stringify({ id: item.id }) });
-    refresh(true);
+  form.append(el("label", { for: inputId }, "Balasan untuk " + item.name), input, el("div", { class: "actions" }, send, note));
+  const replyButton = el("button", { class: "btn sm", type: "button", "aria-expanded": "false" }, "Balas");
+  replyButton.addEventListener("click", () => {
+    form.hidden = !form.hidden;
+    replyButton.setAttribute("aria-expanded", String(!form.hidden));
+    if (!form.hidden) input.focus();
   });
-  return el("div", { class: "row" },
-    el("div", { class: "grow" },
-      el("div", {}, el("strong", {}, item.name), " ", el("span", { class: "tag" }, item.channel), " ",
-        item.urgent ? el("span", { class: "tag urgent" }, "urgent") : "", " ", el("span", { class: "muted" }, time(item.ts))),
-      el("p", { class: "pre" }, item.message),
-      el("p", { class: "pre muted" }, "Balasan bot: " + item.reply),
-      form),
+  const doneButton = el("button", { class: "btn sm", type: "button" }, "Selesai");
+  doneButton.addEventListener("click", async () => {
+    doneButton.disabled = true;
+    try {
+      await api("/api/followups/done", { method: "POST", body: JSON.stringify({ id: item.id }) });
+      toast("Tindak lanjut untuk " + item.name + " ditandai selesai.");
+      refresh(true);
+    } catch (error) {
+      doneButton.disabled = false;
+      toast("Gagal menandai selesai: " + error.message, "error");
+    }
+  });
+  return el("article", { class: "card" + (item.urgent ? " urgent" : ""), "aria-label": (item.urgent ? "Urgent. " : "") + "Tindak lanjut " + item.name },
+    el("div", { class: "card-top" },
+      el("div", { class: "who" }, el("div", { class: "avatar", "aria-hidden": "true" }, initial(item.name)),
+        el("div", {}, el("strong", {}, item.name), el("span", { class: "meta" }, time(item.ts)))),
+      el("div", { class: "actions" }, item.urgent ? el("span", { class: "badge urgent" }, icon("alert"), "Urgent") : "", channelBadge(item.channel))),
+    el("p", { class: "text" }, item.message),
+    el("p", { class: "quote" }, "Balasan bot: " + item.reply),
+    form,
     el("div", { class: "actions" }, replyButton, doneButton));
 }
 
+/* ---------- Chats ---------- */
 async function showChats(view) {
   if (state.chat) {
     const { messages } = await api(`/api/chat?channel=${encodeURIComponent(state.chat.channel)}&chatId=${encodeURIComponent(state.chat.chat_id)}`);
-    return view.replaceChildren(
-      el("button", { class: "small", onclick: () => { state.chat = null; refresh(true); } }, "Kembali"),
-      el("h3", {}, state.chat.name),
-      ...messages.map((m) => el("div", { class: `msg ${m.direction}` }, m.text))
-    );
+    const back = el("button", { class: "btn sm", type: "button", onclick: () => { state.chat = null; refresh(true); } }, icon("back"), "Kembali");
+    const thread = el("div", { class: "thread", role: "log", "aria-label": "Riwayat percakapan dengan " + state.chat.name, tabindex: "0" },
+      ...(messages.length ? messages.map(bubble) : [el("p", { class: "meta" }, "Belum ada pesan.")]));
+    show(view, "chat", el("div", { class: "viewer" },
+      el("div", { class: "viewer-head" }, back, el("h2", {}, state.chat.name), channelBadge(state.chat.channel)), thread));
+    thread.scrollTop = thread.scrollHeight;
+    return;
   }
   const { chats } = await api("/api/chats");
-  if (!chats.length) return view.replaceChildren(el("div", { class: "empty" }, "Belum ada percakapan."));
-  view.replaceChildren(...chats.map((chat) =>
-    el("div", { class: "row" },
-      el("div", { class: "grow" },
-        el("div", {}, el("strong", {}, chat.name), " ", el("span", { class: "tag" }, chat.channel), " ", el("span", { class: "muted" }, `${chat.messages} pesan, ${time(chat.ts)}`)),
-        el("p", { class: "pre muted" }, chat.preview)),
-      el("button", { class: "small", onclick: () => { state.chat = chat; refresh(true); } }, "Buka"))
-  ));
+  if (!chats.length) {
+    return show(view, "chats", emptyState("chat", "Belum ada percakapan", "Percakapan pelanggan dengan bot akan tercatat di sini setelah pesan pertama masuk."));
+  }
+  show(view, "chats", el("div", { class: "stack two" }, ...chats.map((chat) => {
+    const open = el("button", { class: "chat-row", type: "button", "aria-label": "Buka percakapan dengan " + chat.name },
+      el("div", { class: "avatar", "aria-hidden": "true" }, initial(chat.name)),
+      el("div", { class: "body" },
+        el("div", { class: "card-top" }, el("strong", {}, chat.name), el("span", { class: "meta" }, time(chat.ts))),
+        el("span", { class: "preview" }, chat.preview),
+        el("span", { class: "meta" }, chat.channel + " | " + chat.messages + " pesan")));
+    open.addEventListener("click", () => { state.chat = chat; refresh(true); });
+    return open;
+  })));
 }
 
+function bubble(m) {
+  const mine = m.direction === "out";
+  return el("div", { class: "bubble " + (mine ? "out" : "in") },
+    el("span", { class: "who-label" }, mine ? "Alter / staf" : "Pelanggan"),
+    el("span", {}, m.text),
+    m.ts ? el("time", { datetime: m.ts }, clock(m.ts)) : "");
+}
+
+/* ---------- Knowledge ---------- */
 async function showKnowledge(view) {
   const { text } = await api("/api/knowledge");
-  const area = el("textarea", { "aria-label": "Basis pengetahuan", maxlength: "8000" });
+  const area = el("textarea", { id: "knowledge-text", class: "mono", maxlength: "8000", "aria-describedby": "knowledge-help knowledge-count" });
   area.value = text;
-  const note = el("span", { class: "muted" });
-  view.replaceChildren(
-    el("p", { class: "muted" }, "Fakta yang boleh dipakai bot untuk menjawab (FAQ, jam buka, harga, kebijakan). Maksimal 8000 karakter."),
+  const counter = el("span", { id: "knowledge-count", class: "meta" });
+  const updateCount = () => { counter.textContent = area.value.length + " / 8000 karakter"; };
+  area.addEventListener("input", updateCount);
+  updateCount();
+  const save = el("button", { class: "btn primary", type: "button" }, "Simpan perubahan");
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    try {
+      await api("/api/knowledge", { method: "PUT", body: JSON.stringify({ text: area.value }) });
+      toast("Pengetahuan tersimpan. Bot langsung memakainya.");
+    } catch (error) {
+      toast("Gagal menyimpan: " + error.message, "error");
+    } finally {
+      save.disabled = false;
+    }
+  });
+  show(view, "knowledge", el("div", { class: "editor" },
+    el("label", { for: "knowledge-text" }, "Basis pengetahuan bot"),
+    el("p", { id: "knowledge-help", class: "help" }, "Fakta yang boleh dipakai bot untuk menjawab: FAQ, jam buka, harga, dan kebijakan. Maksimal 8000 karakter."),
     area,
-    el("p", {}, el("button", { class: "on", onclick: async () => { await api("/api/knowledge", { method: "PUT", body: JSON.stringify({ text: area.value }) }); note.textContent = " Tersimpan."; } }, "Simpan"), note)
-  );
+    el("div", { class: "editor-foot" }, counter, save)));
 }
 
+/* ---------- Refresh ---------- */
 // `force` is set by something the user just did (a click); the timer never forces,
 // so it cannot wipe a reply the staff is still writing.
 async function refresh(force = false) {
   const view = document.getElementById("view");
+  const key = state.tab === "chats" && state.chat ? "chat" : state.tab;
+  if (force && state.rendered !== key) {
+    view.setAttribute("aria-busy", "true");
+    view.replaceChildren(skeleton());
+  }
   try {
     const overview = await api("/api/overview");
     renderStats(overview.stats);
@@ -236,24 +540,52 @@ async function refresh(force = false) {
     }
     await ({ orders: showOrders, followups: showFollowUps, chats: showChats, knowledge: showKnowledge })[state.tab](view);
   } catch (error) {
-    view.replaceChildren(el("div", { class: "empty" }, "Gagal memuat: " + error.message));
+    state.rendered = "";
+    view.removeAttribute("aria-busy");
+    view.replaceChildren(emptyState("alert", "Gagal memuat data", error.message + ". Mencoba lagi otomatis setiap 10 detik.", "error"));
   }
 }
 
-document.querySelectorAll("nav button").forEach((button) =>
-  button.addEventListener("click", () => {
-    state.tab = button.dataset.tab;
-    state.chat = null;
-    document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b === button));
-    refresh(true);
-  })
-);
-document.getElementById("toggle").addEventListener("click", async () => {
-  await api("/api/active", { method: "POST", body: JSON.stringify({ active: !state.active }) });
+/* ---------- Tabs: click + arrow keys ---------- */
+const tabs = [...document.querySelectorAll("[role=tab]")];
+function selectTab(tab, focus = false) {
+  state.tab = tab.dataset.tab;
+  state.chat = null;
+  tabs.forEach((t) => {
+    const on = t === tab;
+    t.setAttribute("aria-selected", String(on));
+    t.tabIndex = on ? 0 : -1;
+  });
+  document.getElementById("view").setAttribute("aria-labelledby", tab.id);
+  if (focus) tab.focus();
+  refresh(true);
+}
+tabs.forEach((tab, index) => {
+  tab.addEventListener("click", () => selectTab(tab));
+  tab.addEventListener("keydown", (event) => {
+    const moves = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: tabs.length - 1 };
+    if (!(event.key in moves)) return;
+    event.preventDefault();
+    selectTab(tabs[(moves[event.key] + tabs.length) % tabs.length], true);
+  });
+});
+
+document.getElementById("toggle").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await api("/api/active", { method: "POST", body: JSON.stringify({ active: !state.active }) });
+    toast(state.active ? "Bot dimatikan." : "Bot diaktifkan.");
+  } catch (error) {
+    toast("Gagal mengubah status bot: " + error.message, "error");
+  }
+  button.disabled = false;
   refresh(true);
 });
 
-refresh();
+document.getElementById("view").setAttribute("aria-busy", "true");
+document.getElementById("view").replaceChildren(skeleton());
+refresh(true);
 setInterval(() => refresh(), 10000);
 </script>
 </body>

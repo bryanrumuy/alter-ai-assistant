@@ -42,6 +42,11 @@ module.exports = {
   // The dashboard refuses to start without a password. It listens on localhost unless told otherwise.
   dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
   dashboardHost: process.env.DASHBOARD_HOST || "127.0.0.1",
+  // Extra Host names the dashboard answers to (comma separated), e.g. when it sits behind a reverse proxy.
+  dashboardAllowedHosts: (process.env.DASHBOARD_ALLOWED_HOSTS || "")
+    .split(",")
+    .map((host) => host.trim())
+    .filter(Boolean),
   dashboardPort: toNumber(process.env.DASHBOARD_PORT, 3100),
   maxHistory: toNumber(process.env.MAX_HISTORY, 15),
   // Safety net against reply loops with other bots.

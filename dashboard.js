@@ -9,6 +9,9 @@ const { ORDER_STATUSES } = require("./db");
 const MAX_BODY_BYTES = 100 * 1024;
 const MAX_KNOWLEDGE_CHARS = 8000;
 const MAX_REPLY_CHARS = 1000;
+const DEFAULT_HOSTS = ["127.0.0.1", "localhost", "[::1]"];
+const MAX_LOGIN_FAILURES = 5;
+const LOGIN_WINDOW_MS = 60 * 1000;
 
 const ORDER_MESSAGES = {
   diproses: (order) => `Pesanan #${order.id} sedang kami siapkan.`,
@@ -42,6 +45,12 @@ function isAuthorized(req, password) {
   return separator !== -1 && sameSecret(decoded.slice(separator + 1), password);
 }
 
+/** "example.com:3100" -> "example.com", "[::1]:3100" -> "[::1]". */
+function hostnameOf(hostHeader) {
+  const value = String(hostHeader ?? "").trim().toLowerCase();
+  return value.startsWith("[") ? value.slice(0, value.indexOf("]") + 1) : value.split(":")[0];
+}
+
 function send(res, status, body, type = "application/json; charset=utf-8", extra = {}) {
   res.writeHead(status, { "Content-Type": type, ...SECURITY_HEADERS, ...extra });
   res.end(type.startsWith("application/json") ? JSON.stringify(body) : body);
@@ -54,8 +63,7 @@ function readJson(req) {
     req.on("data", (chunk) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(new Error("Body too large"));
-        req.destroy();
+        reject(Object.assign(new Error("Body too large"), { status: 413 }));
         return;
       }
       chunks.push(chunk);
@@ -75,8 +83,19 @@ function readJson(req) {
  * The admin dashboard: a small HTTP server with a JSON API and one page.
  * `deps` is injected so tests can use a temporary database and files.
  */
-function createDashboard({ store, password, knowledgeFile, readActive, writeActive, sendReply }) {
+function createDashboard({
+  store,
+  password,
+  knowledgeFile,
+  readActive,
+  writeActive,
+  sendReply,
+  allowedHosts = DEFAULT_HOSTS,
+  maxLoginFailures = MAX_LOGIN_FAILURES,
+}) {
   if (!password) throw new Error("DASHBOARD_PASSWORD is required");
+  const hosts = new Set(allowedHosts.map((host) => host.toLowerCase()));
+  const failures = new Map(); // client address -> times of recent failed logins
 
   const routes = {
     "GET /api/overview": () => ({ stats: store.stats(), active: readActive() }),
@@ -103,6 +122,7 @@ function createDashboard({ store, password, knowledgeFile, readActive, writeActi
       if (!ORDER_STATUSES.includes(status)) throw Object.assign(new Error("unknown status"), { status: 400 });
       const order = store.getOrder(id);
       if (!order) throw Object.assign(new Error("Order not found"), { status: 404 });
+      if (order.status === status) return { ok: true, notified: false, unchanged: true };
       store.setOrderStatus(id, status);
 
       const text = ORDER_MESSAGES[status]?.(order);
@@ -130,8 +150,13 @@ function createDashboard({ store, password, knowledgeFile, readActive, writeActi
       } catch (error) {
         throw Object.assign(new Error(error.message), { status: 502 });
       }
-      store.logMessage({ channel: followUp.channel, chatId: followUp.chat_id, name: followUp.name, direction: "out", text: text.trim() });
-      store.setFollowUpStatus(id, "done");
+      try {
+        store.logMessage({ channel: followUp.channel, chatId: followUp.chat_id, name: followUp.name, direction: "out", text: text.trim() });
+        store.setFollowUpStatus(id, "done");
+      } catch (error) {
+        console.log("Reply sent but not recorded:", error.message);
+        return { ok: true, recorded: false };
+      }
       return { ok: true };
     },
     "POST /api/active": async (_url, req) => {
@@ -143,19 +168,39 @@ function createDashboard({ store, password, knowledgeFile, readActive, writeActi
     "PUT /api/knowledge": async (_url, req) => {
       const { text } = await readJson(req);
       if (typeof text !== "string") throw Object.assign(new Error("text must be a string"), { status: 400 });
-      fs.writeFileSync(knowledgeFile, text.slice(0, MAX_KNOWLEDGE_CHARS));
+      const tmp = `${knowledgeFile}.tmp`;
+      fs.writeFileSync(tmp, text.slice(0, MAX_KNOWLEDGE_CHARS));
+      fs.renameSync(tmp, knowledgeFile);
       return { ok: true };
     },
   };
 
   return http.createServer(async (req, res) => {
     try {
+      // A page on another site can point its own hostname at this machine (DNS rebinding);
+      // refusing unknown Host headers stops it from reading the API as if it were same-origin.
+      if (!hosts.has(hostnameOf(req.headers.host))) {
+        send(res, 421, { error: "Unknown host" });
+        return;
+      }
+      const client = req.socket.remoteAddress ?? "unknown";
+      const now = Date.now();
+      const recent = (failures.get(client) ?? []).filter((time) => now - time < LOGIN_WINDOW_MS);
+      if (recent.length >= maxLoginFailures) {
+        send(res, 429, { error: "Too many failed logins. Try again in a minute." }, "application/json; charset=utf-8", {
+          "Retry-After": "60",
+        });
+        return;
+      }
       if (!isAuthorized(req, password)) {
+        // A browser asks for the password with no header first; only a wrong password counts as a failure.
+        if (req.headers.authorization) failures.set(client, [...recent, now]);
         send(res, 401, { error: "Login required" }, "application/json; charset=utf-8", {
           "WWW-Authenticate": 'Basic realm="Alter dashboard", charset="UTF-8"',
         });
         return;
       }
+      failures.delete(client);
       const url = new URL(req.url, "http://localhost");
       if (req.method === "GET" && url.pathname === "/") {
         send(res, 200, fs.readFileSync(PAGE, "utf-8"), "text/html; charset=utf-8");
