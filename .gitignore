@@ -1,0 +1,14 @@
+node_modules/
+.env
+.wwebjs_auth/
+.wwebjs_cache/
+.qodo/
+# Real chat content and runtime state
+brain.json
+brain.json.tmp
+memory.json
+state.json
+brain.old.json
+qr.png
+followups.jsonl
+knowledge.md
