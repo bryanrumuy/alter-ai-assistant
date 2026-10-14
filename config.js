@@ -27,6 +27,10 @@ module.exports = {
   reportCron: process.env.REPORT_CRON || "0 * * * *",
   // Newer models only accept their default temperature, so it is sent only when TEMPERATURE is set.
   temperature: process.env.TEMPERATURE ? Number(process.env.TEMPERATURE) : undefined,
+  // Newer reasoning models only accept function tools on chat completions with reasoning_effort "none".
+  // Older models reject that parameter, so it is sent only for gpt-5/gpt-6 models unless overridden.
+  toolsReasoningEffort:
+    process.env.TOOLS_REASONING_EFFORT ?? (/^gpt-[56]/.test(process.env.OPENAI_MODEL || "") ? "none" : ""),
   // Optional: a web app URL that receives each follow-up as JSON (e.g. Google Apps Script -> Sheets).
   sheetsWebhookUrl: process.env.SHEETS_WEBHOOK_URL || "",
   // Optional file with facts the assistant may use to answer questions (FAQ, product info).

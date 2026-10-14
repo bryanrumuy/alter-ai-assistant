@@ -1,0 +1,6 @@
+[
+  { "name": "Kopi susu", "price": 22000 },
+  { "name": "Americano", "price": 18000 },
+  { "name": "Matcha latte", "price": 26000 },
+  { "name": "Croissant", "price": 20000 }
+]

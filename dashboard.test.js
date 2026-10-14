@@ -165,3 +165,46 @@ test("a failed delivery keeps the follow-up open and reports the error", async (
   assert.equal(store.listFollowUps("open").length, 1);
   await new Promise((resolve) => server.close(resolve));
 });
+
+test("moving an order along tells the customer, and a failed message does not undo the status", async () => {
+  const sent = [];
+  let failNext = false;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alter-orders-"));
+  const store = createStore(":memory:");
+  const server = createDashboard({
+    store,
+    password: PASSWORD,
+    knowledgeFile: path.join(dir, "knowledge.md"),
+    readActive: () => true,
+    writeActive() {},
+    sendReply: async (channel, chatId, text) => {
+      if (failNext) throw new Error("blocked");
+      sent.push({ channel, chatId, text });
+    },
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const headers = {
+    Authorization: `Basic ${Buffer.from(`admin:${PASSWORD}`).toString("base64")}`,
+    [CSRF_HEADER]: CSRF_VALUE,
+  };
+  const id = store.addOrder({ channel: "telegram", chatId: 5, name: "Rina", items: [{ name: "Kopi susu", quantity: 1, price: 22000, subtotal: 22000 }], total: 22000, pickupTime: "17.00" });
+  const post = (body) => fetch(`${base}/api/orders/status`, { method: "POST", headers, body: JSON.stringify(body) }).then((r) => r.json());
+
+  const ready = await post({ id, status: "siap" });
+  assert.equal(ready.notified, true);
+  assert.match(sent[0].text, new RegExp(`Pesanan #${id} sudah siap diambil`));
+  assert.equal(store.getOrder(id).status, "siap");
+
+  const bad = await fetch(`${base}/api/orders/status`, { method: "POST", headers, body: JSON.stringify({ id, status: "hacked" }) });
+  assert.equal(bad.status, 400);
+
+  failNext = true;
+  const done = await post({ id, status: "batal" });
+  assert.equal(done.notified, false);
+  assert.equal(store.getOrder(id).status, "batal");
+
+  const listed = await (await fetch(`${base}/api/orders?view=done`, { headers })).json();
+  assert.equal(listed.orders.length, 1);
+  await new Promise((resolve) => server.close(resolve));
+});

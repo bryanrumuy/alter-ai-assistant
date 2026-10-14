@@ -3,6 +3,7 @@
 const path = require("path");
 const config = require("./config");
 const { readActive, writeActive } = require("./state");
+const { describeLines, formatRupiah } = require("./menu");
 
 const DEFAULT_STATE_FILE = path.join(config.dataDir, "telegram-state.json");
 const INACTIVE_TEXT = "Asistennya lagi istirahat. Coba lagi nanti ya.";
@@ -88,7 +89,17 @@ function createAssistant({
 
     log(message, "in", message.text);
     await io.typing();
-    const result = await askAI(message.text, `tg:${message.chatId}`);
+    const result = await askAI(message.text, `tg:${message.chatId}`, {
+      channel: CHANNEL,
+      chatId: message.chatId,
+      name: message.name,
+    });
+
+    for (const order of result.orders ?? []) {
+      await io.notifyOwner(
+        `Pesanan baru #${order.id}\nDari: ${message.name}\n${describeLines(order.items)}\nTotal: ${formatRupiah(order.total)}\nAmbil: ${order.pickupTime}${order.note ? `\nCatatan: ${order.note}` : ""}`
+      );
+    }
 
     if (result.needsFollowUp && !result.failed) {
       await recordFollowUp({

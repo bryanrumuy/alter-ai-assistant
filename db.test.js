@@ -47,6 +47,9 @@ test("stats count incoming messages, chats and follow-ups", () => {
     openFollowUps: 1,
     openUrgent: 1,
     resolvedFollowUps: 0,
+    ordersToday: 0,
+    revenueToday: 0,
+    activeOrders: 0,
   });
 });
 
@@ -55,4 +58,25 @@ test("text that looks like SQL is stored as plain data", () => {
   const evil = "x'); DROP TABLE messages; --";
   store.logMessage({ ...base, name: evil, direction: "in", text: evil });
   assert.equal(store.getChat("telegram", 1)[0].text, evil);
+});
+
+test("orders move through their statuses and feed the stats", () => {
+  const store = createStore(":memory:");
+  const items = [{ name: "Kopi susu", quantity: 2, price: 22000, subtotal: 44000 }];
+  const id = store.addOrder({ ...base, items, total: 44000, pickupTime: "17.00" });
+
+  assert.equal(store.getOrder(id).status, "baru");
+  assert.deepEqual(store.getOrder(id).items, items);
+  assert.equal(store.listOrders("active").length, 1);
+  assert.equal(store.stats().revenueToday, 44000);
+  assert.equal(store.stats().activeOrders, 1);
+
+  assert.equal(store.setOrderStatus(id, "siap"), true);
+  assert.equal(store.setOrderStatus(id, "hacked"), false);
+  assert.equal(store.setOrderStatus(id, "selesai"), true);
+  assert.equal(store.listOrders("active").length, 0);
+  assert.equal(store.listOrders("done").length, 1);
+
+  store.setOrderStatus(id, "batal");
+  assert.equal(store.stats().revenueToday, 0, "a cancelled order is not revenue");
 });

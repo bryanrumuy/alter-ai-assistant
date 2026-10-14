@@ -34,7 +34,8 @@
   .status.active { color:var(--ok); } .status.off { color:var(--danger); }
   .empty { color:var(--muted); padding:24px; text-align:center; }
   .pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; }
-  .actions { display:flex; gap:6px; }
+  .actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .tag.ready { color:var(--ok); border-color:var(--ok); }
   .reply { margin-top:8px; }
   .reply[hidden] { display:none; }
   .reply textarea { min-height:70px; font-family:inherit; }
@@ -48,7 +49,8 @@
 <main>
   <section class="stats" id="stats" aria-label="Ringkasan"></section>
   <nav aria-label="Bagian">
-    <button data-tab="followups" class="on">Tindak lanjut</button>
+    <button data-tab="orders" class="on">Pesanan</button>
+    <button data-tab="followups">Tindak lanjut</button>
     <button data-tab="chats">Percakapan</button>
     <button data-tab="knowledge">Pengetahuan</button>
   </nav>
@@ -57,7 +59,7 @@
 <script>
 "use strict";
 const HEADERS = { "Content-Type": "application/json", "X-Requested-With": "alter-dashboard" };
-const state = { tab: "followups", chat: null, active: false };
+const state = { tab: "orders", chat: null, active: false };
 
 async function api(path, options) {
   const response = await fetch(path, { ...options, headers: HEADERS });
@@ -80,6 +82,8 @@ const time = (iso) => new Date(iso).toLocaleString("id-ID", { dateStyle: "medium
 
 function renderStats(stats) {
   const items = [
+    ["Pesanan aktif", stats.activeOrders],
+    ["Omzet 24 jam", "Rp" + stats.revenueToday.toLocaleString("id-ID")],
     ["Pesan masuk 24 jam", stats.messagesToday],
     ["Total percakapan", stats.chatsTotal],
     ["Perlu ditindaklanjuti", stats.openFollowUps],
@@ -97,6 +101,47 @@ function renderStatus(active) {
   status.textContent = active ? "Bot aktif" : "Bot mati";
   status.className = `status ${active ? "active" : "off"}`;
   document.getElementById("toggle").textContent = active ? "Matikan" : "Aktifkan";
+}
+
+const NEXT_STATUS = { baru: ["diproses", "Proses"], diproses: ["siap", "Siap diambil"], siap: ["selesai", "Selesai"] };
+
+async function showOrders(view) {
+  const { orders } = await api("/api/orders");
+  if (!orders.length) return view.replaceChildren(el("div", { class: "empty" }, "Belum ada pesanan aktif."));
+  view.replaceChildren(...orders.map(orderRow));
+}
+
+async function setOrderStatus(order, status, note) {
+  note.textContent = " Memproses...";
+  try {
+    const result = await api("/api/orders/status", { method: "POST", body: JSON.stringify({ id: order.id, status }) });
+    if (result.notifyError) alert("Status diubah, tapi pelanggan belum diberi tahu: " + result.notifyError);
+    refresh(true);
+  } catch (error) {
+    note.textContent = " Gagal: " + error.message;
+  }
+}
+
+function orderRow(order) {
+  const note = el("span", { class: "muted" });
+  const buttons = [];
+  const next = NEXT_STATUS[order.status];
+  if (next) {
+    const advance = el("button", { class: "small on" }, next[1]);
+    advance.addEventListener("click", () => setOrderStatus(order, next[0], note));
+    buttons.push(advance);
+  }
+  const cancel = el("button", { class: "small" }, "Batalkan");
+  cancel.addEventListener("click", () => { if (confirm("Batalkan pesanan #" + order.id + "? Pelanggan akan diberi tahu.")) setOrderStatus(order, "batal", note); });
+  buttons.push(cancel);
+  const lines = order.items.map((item) => item.quantity + "x " + item.name).join(", ");
+  return el("div", { class: "row" },
+    el("div", { class: "grow" },
+      el("div", {}, el("strong", {}, "#" + order.id + " " + order.name), " ", el("span", { class: "tag" }, order.channel), " ",
+        el("span", { class: "tag " + (order.status === "siap" ? "ready" : "") }, order.status), " ", el("span", { class: "muted" }, time(order.ts))),
+      el("p", { class: "pre" }, lines),
+      el("p", { class: "pre muted" }, "Total Rp" + order.total.toLocaleString("id-ID") + ", ambil " + order.pickup_time + (order.note ? ", catatan: " + order.note : ""))),
+    el("div", { class: "actions" }, ...buttons, note));
 }
 
 async function showFollowUps(view) {
@@ -189,7 +234,7 @@ async function refresh(force = false) {
       const draft = view.querySelector(".reply:not([hidden]) textarea");
       if (draft && draft.value) return;
     }
-    await ({ followups: showFollowUps, chats: showChats, knowledge: showKnowledge })[state.tab](view);
+    await ({ orders: showOrders, followups: showFollowUps, chats: showChats, knowledge: showKnowledge })[state.tab](view);
   } catch (error) {
     view.replaceChildren(el("div", { class: "empty" }, "Gagal memuat: " + error.message));
   }

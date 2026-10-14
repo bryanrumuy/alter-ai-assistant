@@ -25,7 +25,27 @@ CREATE TABLE IF NOT EXISTS followups (
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done'))
 );
 CREATE INDEX IF NOT EXISTS idx_followups_status ON followups (status, id);
+CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  items TEXT NOT NULL,
+  total INTEGER NOT NULL,
+  pickup_time TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'baru' CHECK (status IN ('baru', 'diproses', 'siap', 'selesai', 'batal'))
+);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (status, id);
 `;
+
+const ORDER_STATUSES = ["baru", "diproses", "siap", "selesai", "batal"];
+const ACTIVE_ORDER_STATUSES = ["baru", "diproses", "siap"];
+
+function toOrder(row) {
+  return row ? { ...row, items: JSON.parse(row.items) } : null;
+}
 
 const PREVIEW_CHARS = 120;
 
@@ -68,6 +88,36 @@ function createStore(file) {
         .map((row) => ({ ...row, urgent: row.urgent === 1 }));
     },
 
+    addOrder({ channel, chatId, name, items, total, pickupTime, note = "" }) {
+      const result = db
+        .prepare(
+          "INSERT INTO orders (ts, channel, chat_id, name, items, total, pickup_time, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .run(new Date().toISOString(), channel, String(chatId), name, JSON.stringify(items), total, pickupTime, note);
+      return Number(result.lastInsertRowid);
+    },
+
+    getOrder(id) {
+      return toOrder(db.prepare("SELECT * FROM orders WHERE id = ?").get(id));
+    },
+
+    /** Orders still being worked on (oldest first), or the finished ones (newest first). */
+    listOrders(view = "active", limit = 100) {
+      const rows =
+        view === "done"
+          ? db.prepare("SELECT * FROM orders WHERE status IN ('selesai', 'batal') ORDER BY id DESC LIMIT ?").all(limit)
+          : db
+              .prepare(`SELECT * FROM orders WHERE status IN (${ACTIVE_ORDER_STATUSES.map(() => "?").join(",")}) ORDER BY id LIMIT ?`)
+              .all(...ACTIVE_ORDER_STATUSES, limit);
+      return rows.map(toOrder);
+    },
+
+    setOrderStatus(id, status) {
+      if (!ORDER_STATUSES.includes(status)) return false;
+      const result = db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
+      return Number(result.changes) > 0;
+    },
+
     getFollowUp(id) {
       const row = db.prepare("SELECT * FROM followups WHERE id = ?").get(id);
       return row ? { ...row, urgent: row.urgent === 1 } : null;
@@ -106,6 +156,9 @@ function createStore(file) {
         openFollowUps: count("SELECT COUNT(*) c FROM followups WHERE status = 'open'"),
         openUrgent: count("SELECT COUNT(*) c FROM followups WHERE status = 'open' AND urgent = 1"),
         resolvedFollowUps: count("SELECT COUNT(*) c FROM followups WHERE status = 'done'"),
+        ordersToday: count("SELECT COUNT(*) c FROM orders WHERE status != 'batal' AND ts >= ?", since),
+        revenueToday: count("SELECT COALESCE(SUM(total), 0) c FROM orders WHERE status != 'batal' AND ts >= ?", since),
+        activeOrders: count("SELECT COUNT(*) c FROM orders WHERE status IN ('baru', 'diproses', 'siap')"),
       };
     },
 
@@ -122,4 +175,4 @@ function getStore() {
   return shared;
 }
 
-module.exports = { createStore, getStore };
+module.exports = { createStore, getStore, ORDER_STATUSES };

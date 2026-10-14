@@ -4,10 +4,17 @@ const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const { ORDER_STATUSES } = require("./db");
 
 const MAX_BODY_BYTES = 100 * 1024;
 const MAX_KNOWLEDGE_CHARS = 8000;
 const MAX_REPLY_CHARS = 1000;
+
+const ORDER_MESSAGES = {
+  diproses: (order) => `Pesanan #${order.id} sedang kami siapkan.`,
+  siap: (order) => `Pesanan #${order.id} sudah siap diambil. Silakan datang ke tempat kami.`,
+  batal: (order) => `Pesanan #${order.id} dibatalkan. Kalau ada pertanyaan, balas pesan ini ya.`,
+};
 const CSRF_HEADER = "x-requested-with";
 const CSRF_VALUE = "alter-dashboard";
 const PAGE = path.join(__dirname, "dashboard.html");
@@ -85,6 +92,28 @@ function createDashboard({ store, password, knowledgeFile, readActive, writeActi
       const { id } = await readJson(req);
       if (!Number.isInteger(id)) throw Object.assign(new Error("id must be an integer"), { status: 400 });
       return { ok: store.setFollowUpStatus(id, "done") };
+    },
+    "GET /api/orders": (url) => ({
+      orders: store.listOrders(url.searchParams.get("view") === "done" ? "done" : "active", 100),
+    }),
+    // Moving an order along tells the customer by itself, so staff never type "your order is ready".
+    "POST /api/orders/status": async (_url, req) => {
+      const { id, status } = await readJson(req);
+      if (!Number.isInteger(id)) throw Object.assign(new Error("id must be an integer"), { status: 400 });
+      if (!ORDER_STATUSES.includes(status)) throw Object.assign(new Error("unknown status"), { status: 400 });
+      const order = store.getOrder(id);
+      if (!order) throw Object.assign(new Error("Order not found"), { status: 404 });
+      store.setOrderStatus(id, status);
+
+      const text = ORDER_MESSAGES[status]?.(order);
+      if (!text || !sendReply) return { ok: true, notified: false };
+      try {
+        await sendReply(order.channel, order.chat_id, text);
+        store.logMessage({ channel: order.channel, chatId: order.chat_id, name: order.name, direction: "out", text });
+        return { ok: true, notified: true };
+      } catch (error) {
+        return { ok: true, notified: false, notifyError: error.message };
+      }
     },
     // The staff answer a customer from the follow-up queue; the customer receives it in the same chat.
     "POST /api/followups/reply": async (_url, req) => {

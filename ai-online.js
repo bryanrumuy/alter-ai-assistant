@@ -5,6 +5,8 @@ const fs = require("fs");
 const path = require("path");
 const config = require("./config");
 const { parseReply, trimHistory, URGENT_TAG, NOTE_TAG } = require("./lib");
+const { loadMenu, priceOrder, formatRupiah, describeLines } = require("./menu");
+const { getStore } = require("./db");
 
 const MEMORY_FILE = path.join(config.dataDir, "brain.json");
 
@@ -75,7 +77,7 @@ ATURAN JAWABAN:
 PESAN DARURAT:
 Jika pelanggan dalam keadaan darurat atau masalah serius dan mendesak (kecelakaan, keluhan keselamatan, kerugian besar, ancaman), awali balasan dengan tepat ${URGENT_TAG}, tenangkan, dan bilang tim akan segera menghubungi. Jangan pakai ${URGENT_TAG} untuk pesan biasa.
 
-INFORMASI RESMI:
+${orderingBlock()}INFORMASI RESMI:
 ${knowledge || "(belum ada informasi, teruskan semua pertanyaan spesifik ke tim dengan " + NOTE_TAG + ")"}`;
 }
 
@@ -127,53 +129,167 @@ CONTOH:
 "tolong, ada kecelakaan" -> ${URGENT_TAG} astaga, tenang ya. aku kabari ${owner} sekarang`+knowledgeBlock;
 }
 
+const MAX_TOOL_ROUNDS = 3;
+const MAX_PICKUP_CHARS = 40;
+const MAX_NOTE_CHARS = 200;
+
+function orderingBlock() {
+  const menu = loadMenu();
+  if (menu.length === 0) return "";
+  const lines = menu.map((item) => `- ${item.name}: ${formatRupiah(item.price)}`).join("\n");
+  return `PEMESANAN (pickup saja):
+- Pelanggan boleh memesan item dari MENU di bawah. Kumpulkan item, jumlah, dan jam ambil. Kalau ada yang belum jelas, tanyakan.
+- Setelah lengkap, ringkas pesanan beserta total harga (hitung dari harga menu) lalu minta pelanggan mengonfirmasi.
+- Panggil fungsi create_order HANYA setelah pelanggan jelas menyetujui ringkasan itu.
+- Jangan bilang pesanan sudah tersimpan sebelum create_order berhasil. Setelah berhasil, sampaikan nomor pesanan, ringkasan, total dari hasil fungsi, dan jam ambil. Kalau fungsi mengembalikan error, jelaskan dengan sopan dan perbaiki bersama pelanggan.
+- Item di luar MENU tidak bisa dipesan lewat chat.
+
+MENU:
+${lines}
+
+`;
+}
+
+/** The one tool the model may call. Item names are limited to the menu, so it cannot invent products. */
+function orderTool(menu) {
+  return {
+    type: "function",
+    function: {
+      name: "create_order",
+      description: "Simpan pesanan pelanggan. Panggil hanya setelah pelanggan mengonfirmasi ringkasan pesanan.",
+      parameters: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string", enum: menu.map((item) => item.name) },
+                quantity: { type: "integer", minimum: 1 },
+              },
+              required: ["name", "quantity"],
+            },
+          },
+          pickup_time: { type: "string", description: "Jam pengambilan menurut pelanggan, misalnya 17.00" },
+          note: { type: "string", description: "Catatan tambahan dari pelanggan, boleh kosong" },
+        },
+        required: ["items", "pickup_time"],
+      },
+    },
+  };
+}
+
+/** Runs create_order for real: validates against the menu, computes the total, stores the order. */
+function runCreateOrder(rawArguments, context, orders) {
+  // One confirmed order per customer message: a model that loops must not create duplicates.
+  if (orders.length > 0) return { error: "Pesanan sudah dibuat untuk pesan ini." };
+  let args;
+  try {
+    args = JSON.parse(rawArguments || "{}");
+  } catch {
+    return { error: "Argumen tidak valid." };
+  }
+  const priced = priceOrder(args.items, loadMenu());
+  if (priced.error) return { error: priced.error };
+  const pickupTime = String(args.pickup_time ?? "").trim().slice(0, MAX_PICKUP_CHARS);
+  if (!pickupTime) return { error: "Jam ambil belum diisi." };
+
+  const order = {
+    channel: context.channel,
+    chatId: context.chatId,
+    name: context.name ?? "Pelanggan",
+    items: priced.lines,
+    total: priced.total,
+    pickupTime,
+    note: String(args.note ?? "").trim().slice(0, MAX_NOTE_CHARS),
+  };
+  order.id = getStore().addOrder(order);
+  orders.push(order);
+  return {
+    ok: true,
+    order_id: order.id,
+    summary: describeLines(priced.lines),
+    total: formatRupiah(priced.total),
+    pickup_time: pickupTime,
+  };
+}
+
+async function callModel(messages, tools) {
+  const response = await axios.post(
+    config.apiUrl,
+    {
+      model: config.model,
+      messages,
+      ...(tools ? { tools } : {}),
+      ...(tools && config.toolsReasoningEffort ? { reasoning_effort: config.toolsReasoningEffort } : {}),
+      ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
+    },
+    {
+      headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+      timeout: config.requestTimeoutMs,
+    }
+  );
+  return response.data?.choices?.[0]?.message ?? {};
+}
+
 /**
  * Asks the model for a reply and keeps per-contact memory on disk.
+ * `context` ({ channel, chatId, name }) switches on ordering in business mode.
  * Always resolves: on any API failure it returns the fallback text.
  */
-async function askAI(message, senderId) {
+async function askAI(message, senderId, context = null) {
   const history = histories[senderId] ?? [];
-  const pending = trimHistory(
-    [...history, { role: "user", content: message }],
-    config.maxHistory
-  );
+  const pending = trimHistory([...history, { role: "user", content: message }], config.maxHistory);
+  const failure = { text: config.fallbackReply, isUrgent: false, needsFollowUp: false, orders: [], failed: true };
 
   try {
-    const response = await axios.post(
-      config.apiUrl,
-      {
-        model: config.model,
-        messages: [{ role: "system", content: buildSystemPrompt() }, ...pending],
-        ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        timeout: config.requestTimeoutMs,
-      }
-    );
+    const menu = config.mode === "business" && context ? loadMenu() : [];
+    const tools = menu.length ? [orderTool(menu)] : null;
+    const messages = [{ role: "system", content: buildSystemPrompt() }, ...pending];
+    const orders = [];
 
-    const reply = parseReply(response.data?.choices?.[0]?.message?.content);
-    if (!reply.text) return { text: config.fallbackReply, isUrgent: false, needsFollowUp: false, failed: true };
+    let reply = null;
+    for (let round = 0; round <= MAX_TOOL_ROUNDS && !reply; round += 1) {
+      const answer = await callModel(messages, round < MAX_TOOL_ROUNDS ? tools : null);
+      if (!answer.tool_calls?.length) {
+        reply = parseReply(answer.content);
+        break;
+      }
+      messages.push(answer);
+      for (const call of answer.tool_calls) {
+        const result =
+          call.function?.name === "create_order"
+            ? runCreateOrder(call.function.arguments, context, orders)
+            : { error: "Fungsi tidak dikenal." };
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
+      }
+    }
+    if (!reply?.text && orders.length > 0) {
+      // The order is already stored: confirm it ourselves instead of leaving the customer unsure.
+      const [order] = orders;
+      reply = {
+        text: `Pesanan #${order.id} tercatat: ${describeLines(order.items)}, total ${formatRupiah(order.total)}, ambil ${order.pickupTime}.`,
+        isUrgent: false,
+        needsFollowUp: false,
+      };
+    }
+    if (!reply?.text) return failure;
 
     // Only successful turns are remembered, so a failed call leaves no orphan user message.
-    histories[senderId] = trimHistory(
-      [...pending, { role: "assistant", content: reply.text }],
-      config.maxHistory
-    );
+    histories[senderId] = trimHistory([...pending, { role: "assistant", content: reply.text }], config.maxHistory);
     saveMemory();
 
     return {
       text: reply.text,
       isUrgent: reply.isUrgent,
       needsFollowUp: reply.needsFollowUp,
+      orders,
       failed: false,
     };
   } catch (error) {
     console.log("OpenAI error:", error.response?.data?.error?.message || error.message);
-    return { text: config.fallbackReply, isUrgent: false, needsFollowUp: false, failed: true };
+    return failure;
   }
 }
 

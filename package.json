@@ -9,7 +9,8 @@
     "eval": "node eval.js",
     "telegram": "node telegram-bot.js",
     "dashboard": "node dashboard-bot.js",
-    "eval:business": "node eval-business.js"
+    "eval:business": "node eval-business.js",
+    "eval:orders": "node eval-orders.js"
   },
   "keywords": [
     "whatsapp",
