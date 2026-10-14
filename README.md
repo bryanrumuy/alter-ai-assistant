@@ -15,6 +15,14 @@ An assistant that answers WhatsApp chats on your behalf while you are busy. It i
 - Limits replies per contact per minute to avoid loops with other bots.
 - Reconnects automatically after a disconnect and remembers whether it was switched on.
 
+## Telegram version (official, free)
+
+`npm run telegram` runs the same assistant as an official Telegram bot: no QR code, no unofficial API, no ban risk, and it uses long polling so no public server address is needed.
+
+1. In Telegram open @BotFather, send `/newbot`, and copy the token into `TELEGRAM_BOT_TOKEN` in `.env`.
+2. Run `npm run telegram`, send `/myid` to your bot, and put that number in `TELEGRAM_OWNER_ID`. Restart.
+3. As the owner send `/on`. People who message the bot get answers; messages that need you are logged and sent to you at once. `/off`, `/status` and `/pending` work as well.
+
 ## Setup
 
 1. Install Node.js 18 or newer, then run `npm install`.

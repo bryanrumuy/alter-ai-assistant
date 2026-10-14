@@ -26,6 +26,9 @@ module.exports = {
   sheetsWebhookUrl: process.env.SHEETS_WEBHOOK_URL || "",
   // Optional file with facts the assistant may use to answer questions (FAQ, product info).
   knowledgeFile: process.env.KNOWLEDGE_FILE || "knowledge.md",
+  telegramToken: process.env.TELEGRAM_BOT_TOKEN || "",
+  // Your own Telegram user id (send /myid to the bot): enables owner commands and alerts.
+  telegramOwnerId: process.env.TELEGRAM_OWNER_ID || "",
   maxHistory: toNumber(process.env.MAX_HISTORY, 15),
   // Safety net against reply loops with other bots.
   maxRepliesPerMinute: toNumber(process.env.MAX_REPLIES_PER_MINUTE, 5),

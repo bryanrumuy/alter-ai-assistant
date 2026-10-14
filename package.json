@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node bot.js",
     "test": "node --test",
-    "eval": "node eval.js"
+    "eval": "node eval.js",
+    "telegram": "node telegram-bot.js"
   },
   "keywords": [
     "whatsapp",
@@ -19,6 +20,7 @@
   "dependencies": {
     "axios": "^1.13.5",
     "dotenv": "^17.3.1",
+    "grammy": "^1.46.0",
     "node-cron": "^4.2.1",
     "puppeteer": "^24.37.3",
     "qrcode": "^1.5.4",
