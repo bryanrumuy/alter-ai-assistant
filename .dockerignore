@@ -1,0 +1,12 @@
+node_modules
+.env
+.wwebjs_auth
+.wwebjs_cache
+.qodo
+brain.json
+brain.old.json
+memory.json
+state.json
+followups.jsonl
+qr.png
+.git

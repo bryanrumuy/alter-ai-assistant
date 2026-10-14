@@ -1,0 +1,14 @@
+services:
+  wa-ai-bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # WhatsApp session, chat memory and follow-ups survive restarts here.
+      - bot-data:/data
+      # Optional FAQ facts the assistant may use.
+      # - ./knowledge.md:/app/knowledge.md:ro
+    # Run `docker compose logs -f` on the first start to see the QR code to scan.
+
+volumes:
+  bot-data:

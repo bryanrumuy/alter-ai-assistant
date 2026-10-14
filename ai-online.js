@@ -6,7 +6,7 @@ const path = require("path");
 const config = require("./config");
 const { parseReply, trimHistory, URGENT_TAG, NOTE_TAG } = require("./lib");
 
-const MEMORY_FILE = path.join(__dirname, "brain.json");
+const MEMORY_FILE = path.join(config.dataDir, "brain.json");
 
 let histories = {};
 if (fs.existsSync(MEMORY_FILE)) {

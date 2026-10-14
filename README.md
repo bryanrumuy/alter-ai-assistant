@@ -44,6 +44,16 @@ The bot starts switched off. Send `/on` when you want it to answer.
 
 Create a Google Apps Script web app whose `doPost(e)` appends `JSON.parse(e.postData.contents)` as a row, deploy it, and put its URL in `SHEETS_WEBHOOK_URL`.
 
+## Run it on a server with Docker
+
+The bot only answers while it is running, so for 24/7 use it needs a machine that stays on (a small VPS, Railway or Fly.io; Docker only packages the app, it does not provide the machine).
+
+1. Copy the project and your `.env` to the server.
+2. `docker compose up -d --build`
+3. First start only: `docker compose logs -f`, scan the QR code that is printed, and wait for "Bot ready".
+
+The WhatsApp session, chat memory and follow-ups live in the `bot-data` volume, so restarts do not need a new QR scan.
+
 ## Notes
 
 - `whatsapp-web.js` automates WhatsApp Web and is not an official API. Use it on your own account at your own risk.

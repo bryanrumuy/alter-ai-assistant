@@ -11,8 +11,8 @@ const askAI = require("./ai-online");
 const { isPausedByManual, createRateLimiter } = require("./lib");
 const { recordFollowUp, recentFollowUps } = require("./followups");
 
-const STATE_FILE = path.join(__dirname, "state.json");
-const QR_FILE = path.join(__dirname, "qr.png");
+const STATE_FILE = path.join(config.dataDir, "state.json");
+const QR_FILE = path.join(config.dataDir, "qr.png");
 // Messages the bot sends itself also fire message_create; ignore them for this long.
 const BOT_ECHO_MS = 8000;
 const MIN_TYPING_MS = 1500;
@@ -159,8 +159,13 @@ function startBot() {
   }
 
   client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: { headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] },
+    authStrategy: new LocalAuth({ dataPath: path.join(config.dataDir, ".wwebjs_auth") }),
+    puppeteer: {
+      headless: true,
+      // In Docker the system Chromium is used instead of the bundled download.
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    },
   });
 
   console.log("Starting WhatsApp client...");

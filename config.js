@@ -7,7 +7,11 @@ function toNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+const path = require("path");
+
 module.exports = {
+  // Where runtime data lives (WhatsApp session, memory, follow-ups). Mount this as a volume in Docker.
+  dataDir: process.env.DATA_DIR || __dirname,
   apiKey: process.env.OPENAI_API_KEY,
   apiUrl: process.env.OPENAI_API_URL || "https://api.openai.com/v1/chat/completions",
   model: process.env.OPENAI_MODEL || "gpt-4o-mini",

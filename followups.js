@@ -5,7 +5,7 @@ const path = require("path");
 const axios = require("axios");
 const config = require("./config");
 
-const FOLLOWUP_FILE = path.join(__dirname, "followups.jsonl");
+const FOLLOWUP_FILE = path.join(config.dataDir, "followups.jsonl");
 
 /**
  * Records a message that needs the owner's attention: one JSON line per item in
