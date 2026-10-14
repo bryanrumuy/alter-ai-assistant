@@ -68,3 +68,28 @@ test("parseReply finds and removes a tag in the middle or at the end", () => {
   const end = parseReply("Saya teruskan ya. [CATAT]");
   assert.deepEqual(end, { text: "Saya teruskan ya.", isUrgent: false, needsFollowUp: true });
 });
+
+test("a reply that repeats itself is collapsed (the doubled message seen in a real chat)", () => {
+  const doubled =
+    "Siap, saya catat 3 kopi susu dan 2 croissant. Mau diambil pukul berapa? totalnya Rp106.000. Setelah jam ambil ditentukan, saya rangkum untuk konfirmasi.\n mau diambil pukul berapa? Totalnya Rp106.000. Setelah jam ambil ditentukan, saya rangkum untuk konfirmasi.";
+  assert.equal(
+    parseReply(doubled).text,
+    "Siap, saya catat 3 kopi susu dan 2 croissant. Mau diambil pukul berapa? totalnya Rp106.000. Setelah jam ambil ditentukan, saya rangkum untuk konfirmasi."
+  );
+});
+
+test("short or different sentences are never dropped", () => {
+  assert.equal(parseReply("Ya. Ya. Oke.").text, "Ya. Ya. Oke.");
+  assert.equal(parseReply("Kopi susu Rp22.000. Americano Rp18.000.").text, "Kopi susu Rp22.000. Americano Rp18.000.");
+});
+
+test("a reworded second paragraph is dropped, a genuinely different one is kept", () => {
+  const reworded =
+    "Mau diambil jam berapa? Total pesanan 3 kopi susu dan 2 croissant adalah Rp106.000. Setelah jam pengambilan ditentukan, saya minta konfirmasi pesanan sebelum memprosesnya.\nMau diambil jam berapa? Total 3 kopi susu dan 2 croissant adalah Rp106.000. Setelah jamnya ditentukan, saya akan minta konfirmasi pesanan sebelum memprosesnya.";
+  assert.equal(
+    parseReply(reworded).text,
+    "Mau diambil jam berapa? Total pesanan 3 kopi susu dan 2 croissant adalah Rp106.000. Setelah jam pengambilan ditentukan, saya minta konfirmasi pesanan sebelum memprosesnya."
+  );
+  const different = "Pesanan kamu sudah tercatat.\nSilakan ambil di kasir sebelum pukul 17.00 ya.";
+  assert.equal(parseReply(different).text, different);
+});
