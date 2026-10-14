@@ -7,6 +7,7 @@ const path = require("path");
 
 const MAX_BODY_BYTES = 100 * 1024;
 const MAX_KNOWLEDGE_CHARS = 8000;
+const MAX_REPLY_CHARS = 1000;
 const CSRF_HEADER = "x-requested-with";
 const CSRF_VALUE = "alter-dashboard";
 const PAGE = path.join(__dirname, "dashboard.html");
@@ -67,7 +68,7 @@ function readJson(req) {
  * The admin dashboard: a small HTTP server with a JSON API and one page.
  * `deps` is injected so tests can use a temporary database and files.
  */
-function createDashboard({ store, password, knowledgeFile, readActive, writeActive }) {
+function createDashboard({ store, password, knowledgeFile, readActive, writeActive, sendReply }) {
   if (!password) throw new Error("DASHBOARD_PASSWORD is required");
 
   const routes = {
@@ -84,6 +85,25 @@ function createDashboard({ store, password, knowledgeFile, readActive, writeActi
       const { id } = await readJson(req);
       if (!Number.isInteger(id)) throw Object.assign(new Error("id must be an integer"), { status: 400 });
       return { ok: store.setFollowUpStatus(id, "done") };
+    },
+    // The staff answer a customer from the follow-up queue; the customer receives it in the same chat.
+    "POST /api/followups/reply": async (_url, req) => {
+      const { id, text } = await readJson(req);
+      if (!Number.isInteger(id)) throw Object.assign(new Error("id must be an integer"), { status: 400 });
+      if (typeof text !== "string" || !text.trim() || text.length > MAX_REPLY_CHARS) {
+        throw Object.assign(new Error(`text must be 1 to ${MAX_REPLY_CHARS} characters`), { status: 400 });
+      }
+      const followUp = store.getFollowUp(id);
+      if (!followUp) throw Object.assign(new Error("Follow-up not found"), { status: 404 });
+      if (!sendReply) throw Object.assign(new Error("Replying is not set up"), { status: 501 });
+      try {
+        await sendReply(followUp.channel, followUp.chat_id, text.trim());
+      } catch (error) {
+        throw Object.assign(new Error(error.message), { status: 502 });
+      }
+      store.logMessage({ channel: followUp.channel, chatId: followUp.chat_id, name: followUp.name, direction: "out", text: text.trim() });
+      store.setFollowUpStatus(id, "done");
+      return { ok: true };
     },
     "POST /api/active": async (_url, req) => {
       const { active } = await readJson(req);

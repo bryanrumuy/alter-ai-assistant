@@ -16,3 +16,4 @@ telegram-state.json
 alter.db
 alter.db-wal
 alter.db-shm
+brain.personal-backup.json

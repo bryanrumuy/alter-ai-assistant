@@ -106,3 +106,62 @@ test("the page is served with a strict content security policy", async () => {
 test("the dashboard cannot start without a password", () => {
   assert.throws(() => createDashboard({ store: null, password: "", knowledgeFile: "x", readActive() {}, writeActive() {} }));
 });
+
+test("staff can reply to a follow-up: the answer is sent, logged and the item closes", async () => {
+  const sent = [];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alter-reply-"));
+  const store = createStore(":memory:");
+  const server = createDashboard({
+    store,
+    password: PASSWORD,
+    knowledgeFile: path.join(dir, "knowledge.md"),
+    readActive: () => true,
+    writeActive() {},
+    sendReply: async (channel, chatId, text) => sent.push({ channel, chatId, text }),
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const headers = {
+    Authorization: `Basic ${Buffer.from(`admin:${PASSWORD}`).toString("base64")}`,
+    [CSRF_HEADER]: CSRF_VALUE,
+  };
+  const id = store.addFollowUp({ channel: "telegram", chatId: 77, name: "Rina", message: "menu best seller?", reply: "diteruskan", urgent: false });
+
+  const empty = await fetch(`${base}/api/followups/reply`, { method: "POST", headers, body: JSON.stringify({ id, text: "  " }) });
+  assert.equal(empty.status, 400);
+  const missing = await fetch(`${base}/api/followups/reply`, { method: "POST", headers, body: JSON.stringify({ id: 999, text: "halo" }) });
+  assert.equal(missing.status, 404);
+
+  const ok = await fetch(`${base}/api/followups/reply`, { method: "POST", headers, body: JSON.stringify({ id, text: "Best seller kami kopi susu" }) });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(sent, [{ channel: "telegram", chatId: "77", text: "Best seller kami kopi susu" }]);
+  assert.equal(store.listFollowUps("open").length, 0);
+  assert.equal(store.getChat("telegram", 77).at(-1).text, "Best seller kami kopi susu");
+  await new Promise((resolve) => server.close(resolve));
+});
+
+test("a failed delivery keeps the follow-up open and reports the error", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alter-reply-"));
+  const store = createStore(":memory:");
+  const server = createDashboard({
+    store,
+    password: PASSWORD,
+    knowledgeFile: path.join(dir, "knowledge.md"),
+    readActive: () => true,
+    writeActive() {},
+    sendReply: async () => {
+      throw new Error("Telegram menolak pesan");
+    },
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const headers = {
+    Authorization: `Basic ${Buffer.from(`admin:${PASSWORD}`).toString("base64")}`,
+    [CSRF_HEADER]: CSRF_VALUE,
+  };
+  const id = store.addFollowUp({ channel: "telegram", chatId: 1, name: "Rina", message: "m", reply: "r", urgent: false });
+  const response = await fetch(`${base}/api/followups/reply`, { method: "POST", headers, body: JSON.stringify({ id, text: "halo" }) });
+  assert.equal(response.status, 502);
+  assert.equal(store.listFollowUps("open").length, 1);
+  await new Promise((resolve) => server.close(resolve));
+});

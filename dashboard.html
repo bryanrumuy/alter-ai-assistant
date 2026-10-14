@@ -34,6 +34,10 @@
   .status.active { color:var(--ok); } .status.off { color:var(--danger); }
   .empty { color:var(--muted); padding:24px; text-align:center; }
   .pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; }
+  .actions { display:flex; gap:6px; }
+  .reply { margin-top:8px; }
+  .reply[hidden] { display:none; }
+  .reply textarea { min-height:70px; font-family:inherit; }
 </style>
 </head>
 <body>
@@ -98,15 +102,42 @@ function renderStatus(active) {
 async function showFollowUps(view) {
   const { items } = await api("/api/followups");
   if (!items.length) return view.replaceChildren(el("div", { class: "empty" }, "Tidak ada yang menunggu."));
-  view.replaceChildren(...items.map((item) =>
-    el("div", { class: "row" },
-      el("div", { class: "grow" },
-        el("div", {}, el("strong", {}, item.name), " ", el("span", { class: "tag" }, item.channel), " ",
-          item.urgent ? el("span", { class: "tag urgent" }, "urgent") : "", " ", el("span", { class: "muted" }, time(item.ts))),
-        el("p", { class: "pre" }, item.message),
-        el("p", { class: "pre muted" }, "Balasan bot: " + item.reply)),
-      el("button", { class: "small", onclick: async () => { await api("/api/followups/done", { method: "POST", body: JSON.stringify({ id: item.id }) }); refresh(); } }, "Selesai"))
-  ));
+  view.replaceChildren(...items.map(followUpRow));
+}
+
+function followUpRow(item) {
+  const form = el("div", { class: "reply", hidden: "" });
+  const note = el("span", { class: "muted" });
+  const input = el("textarea", { "aria-label": "Balasan untuk " + item.name, maxlength: "1000", placeholder: "Tulis balasan untuk pelanggan..." });
+  input.style.minHeight = "70px";
+  const send = el("button", { class: "small on" }, "Kirim");
+  send.addEventListener("click", async () => {
+    send.disabled = true;
+    note.textContent = " Mengirim...";
+    try {
+      await api("/api/followups/reply", { method: "POST", body: JSON.stringify({ id: item.id, text: input.value }) });
+      refresh();
+    } catch (error) {
+      send.disabled = false;
+      note.textContent = " Gagal: " + error.message;
+    }
+  });
+  form.append(input, el("div", {}, send, note));
+  const replyButton = el("button", { class: "small" }, "Balas");
+  replyButton.addEventListener("click", () => { form.hidden = !form.hidden; if (!form.hidden) input.focus(); });
+  const doneButton = el("button", { class: "small" }, "Selesai");
+  doneButton.addEventListener("click", async () => {
+    await api("/api/followups/done", { method: "POST", body: JSON.stringify({ id: item.id }) });
+    refresh();
+  });
+  return el("div", { class: "row" },
+    el("div", { class: "grow" },
+      el("div", {}, el("strong", {}, item.name), " ", el("span", { class: "tag" }, item.channel), " ",
+        item.urgent ? el("span", { class: "tag urgent" }, "urgent") : "", " ", el("span", { class: "muted" }, time(item.ts))),
+      el("p", { class: "pre" }, item.message),
+      el("p", { class: "pre muted" }, "Balasan bot: " + item.reply),
+      form),
+    el("div", { class: "actions" }, replyButton, doneButton));
 }
 
 async function showChats(view) {
@@ -148,6 +179,9 @@ async function refresh() {
     renderStats(overview.stats);
     renderStatus(overview.active);
     if (document.activeElement && document.activeElement.tagName === "TEXTAREA") return;
+    // Do not wipe a reply the staff is still writing.
+    const draft = view.querySelector(".reply:not([hidden]) textarea");
+    if (draft && draft.value) return;
     await ({ followups: showFollowUps, chats: showChats, knowledge: showKnowledge })[state.tab](view);
   } catch (error) {
     view.replaceChildren(el("div", { class: "empty" }, "Gagal memuat: " + error.message));

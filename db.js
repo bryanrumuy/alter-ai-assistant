@@ -68,6 +68,11 @@ function createStore(file) {
         .map((row) => ({ ...row, urgent: row.urgent === 1 }));
     },
 
+    getFollowUp(id) {
+      const row = db.prepare("SELECT * FROM followups WHERE id = ?").get(id);
+      return row ? { ...row, urgent: row.urgent === 1 } : null;
+    },
+
     setFollowUpStatus(id, status) {
       const result = db.prepare("UPDATE followups SET status = ? WHERE id = ?").run(status, id);
       return Number(result.changes) > 0;
