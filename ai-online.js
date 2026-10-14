@@ -154,6 +154,7 @@ function orderingBlock(menu) {
 - Pelanggan boleh memesan item dari MENU di bawah. Kumpulkan item, jumlah, dan jam ambil. Kalau ada yang belum jelas, tanyakan.
 - Setelah lengkap, ringkas pesanan beserta total harga (hitung dari harga menu) lalu minta pelanggan mengonfirmasi.
 - Panggil fungsi create_order HANYA setelah pelanggan jelas menyetujui ringkasan itu.
+- Jika create_order mengembalikan status awaiting_customer_confirmation, pesanan BELUM tersimpan: tampilkan ringkasan dan total itu kepada pelanggan lalu tunggu persetujuan mereka di pesan berikutnya.
 - Jangan bilang pesanan sudah tersimpan sebelum create_order berhasil. Setelah berhasil, sampaikan nomor pesanan, ringkasan, total dari hasil fungsi, dan jam ambil. Kalau fungsi mengembalikan error, jelaskan dengan sopan dan perbaiki bersama pelanggan.
 - Item di luar MENU tidak bisa dipesan lewat chat.
 
@@ -193,8 +194,13 @@ function orderTool(menu) {
   };
 }
 
+/** True when the assistant's previous message already showed the customer this total (dots or "Rp" ignored). */
+function totalWasShown(previousText, total) {
+  return String(previousText ?? "").replace(/[.,\s]/g, "").includes(String(total));
+}
+
 /** Runs create_order for real: validates against the menu, computes the total, stores the order. */
-function runCreateOrder(rawArguments, context, orders, menu) {
+function runCreateOrder(rawArguments, context, orders, menu, lastAssistantText) {
   // One confirmed order per customer message: a model that loops must not create duplicates.
   if (orders.length > 0) return { error: "Pesanan sudah dibuat untuk pesan ini." };
   if (getStore().countOpenOrders(context.channel, context.chatId) >= MAX_OPEN_ORDERS_PER_CHAT) {
@@ -210,6 +216,21 @@ function runCreateOrder(rawArguments, context, orders, menu) {
   if (priced.error) return { error: priced.error };
   const pickupTime = String(args.pickup_time ?? "").trim().slice(0, MAX_PICKUP_CHARS);
   if (!pickupTime) return { error: "Jam ambil belum diisi." };
+
+  // Confirmation is enforced here, not left to the model: the order is only stored when the customer
+  // has already been shown this exact total. Otherwise the model must first show the summary.
+  if (!totalWasShown(lastAssistantText, priced.total)) {
+    return {
+      status: "awaiting_customer_confirmation",
+      saved: false,
+      summary: describeLines(priced.lines),
+      total: formatRupiah(priced.total),
+      pickup_time: pickupTime,
+      instruction:
+        "Pesanan BELUM disimpan. Tampilkan ringkasan dan total ini kepada pelanggan dan minta konfirmasi yang jelas. " +
+        "Setelah pelanggan menyetujui di pesan berikutnya, panggil create_order lagi dengan isi yang sama.",
+    };
+  }
 
   const order = {
     channel: context.channel,
@@ -259,7 +280,7 @@ function confirmationFor(order) {
 }
 
 /** Lets the model call create_order for a few rounds, then returns its final reply (or null). */
-async function runToolLoop(messages, tools, menu, context, orders) {
+async function runToolLoop(messages, tools, menu, context, orders, lastAssistantText) {
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
     const answer = await callModel(messages, round < MAX_TOOL_ROUNDS ? tools : null);
     if (!answer.tool_calls?.length) return parseReply(answer.content, config.ownerName);
@@ -267,7 +288,7 @@ async function runToolLoop(messages, tools, menu, context, orders) {
     for (const call of answer.tool_calls) {
       const result =
         call.function?.name === "create_order"
-          ? runCreateOrder(call.function.arguments, context, orders, menu)
+          ? runCreateOrder(call.function.arguments, context, orders, menu, lastAssistantText)
           : { error: "Fungsi tidak dikenal." };
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
     }
@@ -285,7 +306,8 @@ async function answer(message, senderId, context) {
     const menu = config.mode === "business" && context ? loadMenu() : [];
     const tools = menu.length ? [orderTool(menu)] : null;
     const messages = [{ role: "system", content: buildSystemPrompt(menu) }, ...pending];
-    reply = await runToolLoop(messages, tools, menu, context, orders);
+    const lastAssistantText = getHistory(senderId).findLast((entry) => entry.role === "assistant")?.content ?? "";
+    reply = await runToolLoop(messages, tools, menu, context, orders, lastAssistantText);
   } catch (error) {
     console.log("OpenAI error:", error.response?.data?.error?.message || error.message);
   }

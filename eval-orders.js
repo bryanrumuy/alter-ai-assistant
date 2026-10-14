@@ -30,6 +30,11 @@ const scenarios = [
     check: (orders) => orders.length === 0,
   },
   {
+    name: "a complete order in one message is only summarised, not stored (the Rp690.000 case)",
+    turns: ["saya pesan matcha latte 15 sama croissant 15 ya, ambil jam 12 siang"],
+    check: (orders, last) => orders.length === 0 && /690\.?000/.test(last.text),
+  },
+  {
     name: "no order is created before the customer confirms",
     turns: ["mau 1 americano ambil jam 10"],
     check: (orders) => orders.length === 0,
@@ -51,7 +56,7 @@ async function main() {
       last = await askAI(turn, customer, { channel: "telegram", chatId: 1000 + index, name: "Penguji" });
       created.push(...last.orders);
     }
-    const ok = scenario.check(created) && !last.failed;
+    const ok = scenario.check(created, last) && !last.failed;
     if (ok) passed += 1;
     console.log(`${ok ? "PASS" : "FAIL"}  ${scenario.name}`);
     console.log(`       orders: ${created.map((o) => `#${o.id} Rp${o.total}`).join(", ") || "none"}  |  last reply: ${last.text}`);

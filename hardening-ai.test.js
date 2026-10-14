@@ -36,6 +36,10 @@ const orderCall = {
 };
 
 test("an order stored before a network error is still confirmed and reported", async () => {
+  // The customer has already been shown the total (Rp22.000), so this turn is their confirmation.
+  axios.post = async () => ({ data: { choices: [{ message: { role: "assistant", content: "Total Rp22.000, ambil jam 10.00. Benar?" } }] } });
+  await askAI("pesan 1 kopi susu jam 10", "tg:101", context(101));
+
   let calls = 0;
   axios.post = async () => {
     calls += 1;
