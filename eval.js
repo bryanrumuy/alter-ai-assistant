@@ -3,6 +3,10 @@
 // Runs a fixed set of test chats against the real model and checks each reply.
 // Usage: npm run eval   (needs OPENAI_API_KEY in .env; makes ~20 API calls)
 
+// This evaluation is for the personal-assistant persona, whatever BOT_MODE the running bot uses.
+process.env.BOT_MODE = "personal";
+process.env.KNOWLEDGE_FILE = "knowledge.example.md";
+
 const fs = require("fs");
 const path = require("path");
 const askAI = require("./ai-online");
